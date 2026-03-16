@@ -128,17 +128,19 @@ static const std::vector<std::string> problems = {"markshare_4_0",
                                                   "fiball"};
 
 int main() {
-  for (const auto& problem_name : problems) {
-    auto matrix = get_problem_matrix(problem_name);
+  std::string problem_name = "neos-5114902-kasavu";
+  // for (const auto& problem_name : problems) {
+  auto matrix = get_problem_matrix(problem_name);
 
-    std::println("{}: {} x {}", problem_name, matrix.shape().first, matrix.shape().second);
+  std::println("{}: {} x {}", problem_name, matrix.shape().first,
+               matrix.shape().second);
 
-    // auto bf_result =
-        // seekers::BruteForce(seekers::BruteForceHamming{2}).seek(matrix);
-    // std::println("found: {} pairs", bf_result.size());
+  // auto bf_result =
+  // seekers::BruteForce(seekers::BruteForceHamming{2}).seek(matrix);
+  auto result = seekers::Tables().seek(matrix);
+  std::println("found: {} pairs", result.size());
+  // }
 
-    seekers::Tables().seek(matrix);
-  }
   // for (auto [i, j] : result) {
   //   std::println("------------- ({}, {}) -------------", i, j);
   //

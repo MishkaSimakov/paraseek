@@ -2,6 +2,7 @@
 
 #include "ProblemMatrix.h"
 #include "seekers/BruteForce.h"
+#include "seekers/Tables.h"
 
 static const std::vector<std::string> problems = {"markshare_4_0",
                                                   "markshare2",
@@ -131,7 +132,21 @@ static void benchmark_brute_force(benchmark::State& state) {
   state.ResumeTiming();
 
   for (auto _ : state) {
-    seekers::BruteForce(3).seek(matrix);
+    seekers::BruteForce(seekers::BruteForceHamming{2}).seek(matrix);
+  }
+
+  state.SetComplexityN(matrix.nonzero_count());
+}
+
+static void benchmark_tables(benchmark::State& state) {
+  const std::string& problem_name = problems[state.range(0)];
+
+  state.PauseTiming();
+  auto matrix = get_problem_matrix(problem_name);
+  state.ResumeTiming();
+
+  for (auto _ : state) {
+    seekers::Tables().seek(matrix);
   }
 
   state.SetComplexityN(matrix.nonzero_count());
@@ -141,6 +156,10 @@ int main(int argc, char** argv) {
   benchmark::Initialize(&argc, argv);
 
   benchmark::RegisterBenchmark("BruteForce", benchmark_brute_force)
+      ->DenseRange(0, problems.size() - 1)
+      ->Complexity();
+
+  benchmark::RegisterBenchmark("Tables", benchmark_tables)
       ->DenseRange(0, problems.size() - 1)
       ->Complexity();
 

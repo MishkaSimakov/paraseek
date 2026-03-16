@@ -3,9 +3,11 @@
 #include <algorithm>
 #include <numeric>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "matrix/CSCMatrix.h"
+#include "utils/Hashers.h"
 
 namespace seekers {
 
@@ -15,25 +17,58 @@ class Tables {
     size_t next;
   };
 
+  static void print_top_classes(const std::vector<size_t>& classes,
+                                size_t count) {
+    std::unordered_map<size_t, size_t> counts;
+    for (size_t c : classes) {
+      ++counts[c];
+    }
+
+    std::vector<std::pair<size_t, size_t>> sizes(counts.begin(), counts.end());
+    std::ranges::sort(sizes, {},
+                      [&](auto p) { return -static_cast<int>(p.second); });
+
+    for (size_t i = 0; i < count; ++i) {
+      std::println("  {} {}", sizes[i].second, sizes[i].first);
+    }
+  }
+
   void seek_table(const CSCMatrix<double>& matrix,
-                  const std::vector<size_t>& permutation) {
+                  const std::vector<SparseVector<double>>& transposed,
+                  const std::vector<std::vector<size_t>>& groups,
+                  const std::vector<bool>& groups_mask,
+                  std::unordered_set<std::pair<size_t, size_t>>& result) {
     auto [n, d] = matrix.shape();
 
     size_t classes_cnt = 1;
     std::vector<size_t> classes(n, 0);
-    std::unordered_map<size_t, size_t> map;
+    std::vector<double> coef(n, 0);
 
-    for (size_t i = 0; 2 * i < d; ++i) {
-      map.clear();
+    std::unordered_map<std::pair<size_t, int>, size_t> map;
 
-      for (auto [row, _] : matrix.get_column(permutation[i])) {
-        auto [itr, new_class] = map.emplace(classes[row], classes_cnt);
+    for (size_t group_id = 0; group_id < groups.size(); ++group_id) {
+      if (!groups_mask[group_id]) {
+        continue;
+      }
 
-        if (new_class) {
-          ++classes_cnt;
+      for (size_t col : groups[group_id]) {
+        map.clear();
+
+        for (auto [row, value] : matrix.get_column(col)) {
+          if (coef[row] == 0) {
+            coef[row] = value;
+          }
+
+          int normalized = static_cast<int>(value / coef[row]);
+          auto [itr, new_class] =
+              map.emplace(std::pair{classes[row], normalized}, classes_cnt);
+
+          if (new_class) {
+            ++classes_cnt;
+          }
+
+          classes[row] = itr->second;
         }
-
-        classes[row] = itr->second;
       }
     }
 
@@ -42,20 +77,21 @@ class Tables {
 
     std::ranges::sort(indices, {}, [&](size_t i) { return classes[i]; });
 
-    std::unordered_map<size_t, size_t> counts;
+    // for each class remaining positions must be checked
+    print_top_classes(classes, 5);
+
     for (size_t i = 0; i < n; ++i) {
-      ++counts[classes[i]];
-    }
+      if (classes[indices[i]] == 0) {
+        continue;
+      }
 
-    std::vector<std::pair<size_t, size_t>> sizes;
-    for (auto [i, j] : counts) {
-      sizes.emplace_back(i, j);
-    }
-    std::ranges::sort(sizes, {},
-                      [&](auto p) { return -static_cast<int>(p.second); });
-
-    for (size_t i = 0; i < 1; ++i) {
-      std::println("  {} {}", sizes[i].second, sizes[i].first);
+      for (size_t j = i + 1;
+           j < n && classes[indices[j]] == classes[indices[i]]; ++j) {
+        if (similarity::hamming(transposed[indices[i]],
+                                transposed[indices[j]]) <= 2) {
+          result.emplace(indices[i], indices[j]);
+        }
+      }
     }
   }
 
@@ -64,28 +100,44 @@ class Tables {
   Tables() = default;
 
   std::vector<std::pair<size_t, size_t>> seek(const CSCMatrix<double>& matrix) {
-    // 4 permutations
+    constexpr size_t groups_count = 4;
+    constexpr size_t selected_groups_count = groups_count - 2;
+
     auto [n, d] = matrix.shape();
     std::vector<size_t> permutation(d);
-    std::iota(permutation.begin(), permutation.end(), 0);
 
-    seek_table(matrix, permutation);
+    std::vector<SparseVector<double>> transposed(n);
+    for (size_t col = 0; col < d; ++col) {
+      for (auto [row, value] : matrix.get_column(col)) {
+        transposed[row].emplace_back(col, value);
+      }
+    }
 
-    //
-    std::vector<uint8_t> parts(n, 0);
+    // find groups
+    // for each rows stores a bitmask:
+    // bit i is zero for row j if j-th row is empty in i-th group
+    std::vector<uint32_t> zero_rows(n, 0);
+    std::vector<std::vector<size_t>> groups(groups_count);
+
+    static_assert(groups_count <= std::numeric_limits<uint32_t>::digits);
 
     for (size_t col = 0; col < d; ++col) {
+      bool found_any = false;
+
       for (auto [row, _] : matrix.get_column(col)) {
         // if there is a group without elements in this row, add this column
         // into this group
-        if (parts[row] != 0b1111) {
-          for (size_t i = 0; i < 4; ++i) {
-            size_t group = (i + col) % 4;
+        if (zero_rows[row] != (1 << groups_count) - 1) {
+          for (size_t i = 0; i < groups_count; ++i) {
+            size_t group = (i + col) % groups_count;
 
-            if ((parts[row] >> group & 1) == 0) {
+            if ((zero_rows[row] >> group & 1) == 0) {
               // add this column to group
+              found_any = true;
+              groups[group].push_back(col);
+
               for (auto [j, _] : matrix.get_column(col)) {
-                parts[j] |= 1 << group;
+                zero_rows[j] |= 1 << group;
               }
 
               break;
@@ -95,30 +147,24 @@ class Tables {
           break;
         }
       }
-    }
 
-    std::vector<size_t> zero_cnt(16, 0);
-
-    for (uint8_t part : parts) {
-      for (size_t group1 = 0; group1 < 4; ++group1) {
-        for (size_t group2 = 0; group2 < 4; ++group2) {
-          if ((part >> group1 & 1) == 0 && (part >> group2 & 1) == 0) {
-            ++zero_cnt[group1 * 4 + group2];
-          }
-        }
+      if (!found_any) {
+        groups[col % groups_count].push_back(col);
       }
     }
 
-    for (size_t group1 = 0; group1 < 4; ++group1) {
-      for (size_t group2 = 0; group2 < 4; ++group2) {
-        std::cout << "  " << zero_cnt[group1 * 4 + group2];
-      }
-      std::cout << std::endl;
-    }
+    std::vector<bool> mask(groups_count, false);
+    std::fill_n(mask.begin(), selected_groups_count, true);
 
-    std::cout << std::endl;
+    std::unordered_set<std::pair<size_t, size_t>> result;
 
-    return {};
+    size_t i = 0;
+
+    do {
+      seek_table(matrix, transposed, groups, mask, result);
+    } while (std::ranges::prev_permutation(mask).found);
+
+    return {result.begin(), result.end()};
   }
 };
 
