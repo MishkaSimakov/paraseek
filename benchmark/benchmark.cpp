@@ -1,11 +1,7 @@
-#include <numeric>
-#include <print>
-#include <random>
+#include <benchmark/benchmark.h>
 
 #include "ProblemMatrix.h"
 #include "seekers/BruteForce.h"
-#include "seekers/SimHash.h"
-#include "seekers/Tables.h"
 
 static const std::vector<std::string> problems = {"markshare_4_0",
                                                   "markshare2",
@@ -127,62 +123,26 @@ static const std::vector<std::string> problems = {"markshare_4_0",
                                                   "supportcase40",
                                                   "fiball"};
 
-int main() {
-  for (const auto& problem_name : problems) {
-    auto matrix = get_problem_matrix(problem_name);
+static void benchmark_brute_force(benchmark::State& state) {
+  const std::string& problem_name = problems[state.range(0)];
 
-    std::println("{}: {} x {}", problem_name, matrix.shape().first, matrix.shape().second);
+  state.PauseTiming();
+  auto matrix = get_problem_matrix(problem_name);
+  state.ResumeTiming();
 
-    // auto bf_result =
-        // seekers::BruteForce(seekers::BruteForceHamming{2}).seek(matrix);
-    // std::println("found: {} pairs", bf_result.size());
-
-    seekers::Tables().seek(matrix);
+  for (auto _ : state) {
+    seekers::BruteForce(3).seek(matrix);
   }
-  // for (auto [i, j] : result) {
-  //   std::println("------------- ({}, {}) -------------", i, j);
-  //
-  //   auto i_row = matrix.get_row(i);
-  //   auto j_row = matrix.get_row(j);
-  //
-  //   for (auto [col, value] : i_row) {
-  //     std::print("({}, {}) ", col, value);
-  //   }
-  //   std::print("\n");
-  //
-  //   for (auto [col, value] : j_row) {
-  //     std::print("({}, {}) ", col, value);
-  //   }
-  //   std::print("\n\n");
-  // }
 
-  // auto sh_result = seekers::SimHash().seek(matrix, bf_result);
-  // std::println("found: {} pairs", sh_result.size());
+  state.SetComplexityN(matrix.nonzero_count());
+}
 
-  // for (const auto& problem_name : problems) {
-  //   auto matrix = get_problem_matrix(problem_name);
-  //
-  //   auto [n, d] = matrix.shape();
-  //
-  //   std::vector<size_t> permutation(d);
-  //   std::iota(permutation.begin(), permutation.end(), 0);
-  //   std::ranges::shuffle(permutation, std::default_random_engine{});
-  //
-  //   std::vector<size_t> counts(n);
-  //   for (size_t i = 0; 2 * i < d; ++i) {
-  //     for (auto [row, _] : matrix.get_column(permutation[i])) {
-  //       ++counts[row];
-  //     }
-  //   }
-  //
-  //   size_t zero_count = 0;
-  //   for (size_t cnt : counts) {
-  //     if (cnt == 0) {
-  //       ++zero_count;
-  //     }
-  //   }
-  //
-  //   std::println("{} - {}/{} = {}", problem_name, zero_count, n,
-  //   static_cast<double>(zero_count) / static_cast<double>(n));
-  // }
+int main(int argc, char** argv) {
+  benchmark::Initialize(&argc, argv);
+
+  benchmark::RegisterBenchmark("BruteForce", benchmark_brute_force)
+      ->DenseRange(0, problems.size() - 1)
+      ->Complexity();
+
+  benchmark::RunSpecifiedBenchmarks();
 }
