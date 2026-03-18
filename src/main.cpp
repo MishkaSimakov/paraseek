@@ -296,7 +296,7 @@ int main() {
   std::ofstream os("output.csv");
   std::println(os, "problem,found,considered");
 
-  for (size_t i = 0; i < 145; ++i) {
+  for (size_t i = 0; i < problems.size(); ++i) {
     const auto& problem_name = problems[i];
 
     auto matrix = get_problem_matrix(problem_name);
@@ -317,6 +317,7 @@ int main() {
 
     std::println(os, "{},{},{}", problem_name, result.size(),
                  seeker.get_stats().pairs_considered);
+
     //
     // std::println(output, "{},{},{}", problem_name, 4,
     //              seeker.get_stats().pairs_considered);

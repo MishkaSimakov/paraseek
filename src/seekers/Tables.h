@@ -126,6 +126,21 @@ class Tables {
 
     if (similarity::hamming(transposed_[i], transposed_[j]) <= max_diff) {
       result_.emplace(i, j);
+    } else {
+      // std::println("({}, {}):", i, j);
+      //
+      // auto xs = transposed_[i];
+      // auto ys = transposed_[j];
+      //
+      // for (auto [i, x, y] : SparseZipRange{xs, ys}) {
+      //   std::print("{:8} ", x);
+      // }
+      // std::print("\n");
+      //
+      // for (auto [i, x, y] : SparseZipRange{xs, ys}) {
+      //   std::print("{:8} ", y);
+      // }
+      // std::print("\n\n");
     }
   }
 
@@ -209,69 +224,69 @@ class Tables {
     }
   }
 
+  void process_row(
+      size_t row_index, const SparseVector<double>& row, size_t removed,
+      std::vector<std::unordered_multimap<size_t, size_t>>& hashes) {
+    RowHasher hasher(row.size());
+
+    for (const size_t index : row | std::views::keys) {
+      hasher << index;
+    }
+
+    size_t hash = hasher.get_hash();
+    auto [begin, end] = hashes[max_diff - removed].equal_range(hash);
+
+    for (auto itr = begin; itr != end; ++itr) {
+      consider_pair(row_index, itr->second);
+    }
+
+    for (size_t i = removed; i <= max_diff; ++i) {
+      hashes[i].emplace(hash, row_index);
+    }
+  }
+
+  void traverse_row_combinations(
+      size_t row, size_t i, SparseVector<double>& current, size_t removed,
+      std::vector<std::unordered_multimap<size_t, size_t>>& hashes) {
+    if (i == transposed_[row].size()) {
+      process_row(row, current, removed, hashes);
+      return;
+    }
+
+    current.push_back(transposed_[row][i]);
+    traverse_row_combinations(row, i + 1, current, removed, hashes);
+    current.pop_back();
+
+    if (removed < max_diff) {
+      traverse_row_combinations(row, i + 1, current, removed + 1, hashes);
+    }
+  }
+
   void seek_small() {
     // process small rows using hashing
     size_t n = transposed_.size();
 
+    size_t small_rows_cnt = 0;
+    for (size_t i = 0; i < n; ++i) {
+      if (transposed_[i].size() > 3 * max_diff) {
+        ++small_rows_cnt;
+      }
+    }
+
     // stores pairs of (hash, row index)
-    std::vector<std::unordered_multimap<size_t, size_t>> hashes(3 * max_diff +
-                                                                1);
+    std::vector<std::unordered_multimap<size_t, size_t>> hashes(max_diff + 1);
+    for (size_t i = 0; i <= max_diff; ++i) {
+      hashes[i].reserve(small_rows_cnt * 3);
+    }
+
+    SparseVector<double> buffer;
 
     for (size_t i = 0; i < n; ++i) {
-      const auto& row = transposed_[i];
-
-      if (row.size() > 3 * max_diff) {
+      if (transposed_[i].size() > 3 * max_diff) {
         continue;
       }
 
-      // hash whole row
-      size_t size = row.size();
-      RowHasher hasher(size);
-
-      double coef = 0;
-      for (const auto [index, value] : row) {
-        if (coef == 0) {
-          coef = value;
-        }
-
-        hasher << index << normalize_double(value / coef);
-      }
-
-      size_t hash = hasher.get_hash();
-      auto [begin, end] = hashes[size].equal_range(hash);
-
-      for (auto itr = begin; itr != end; ++itr) {
-        consider_pair(i, itr->second);
-      }
-
-      hashes[size].emplace_hint(begin, hash, i);
-
-      // hash row with at most two elements removed
-      for (size_t k = 0; k < row.size(); ++k) {
-        for (size_t t = k; t < row.size(); ++t) {
-          size_t size = k == t ? row.size() - 1 : row.size() - 2;
-          RowHasher hasher(size);
-
-          double coef = 0;
-          for (size_t p = 0; p < row.size(); ++p) {
-            if (p != k && p != t) {
-              if (coef == 0) {
-                coef = row[p].second;
-              }
-              hasher << row[p].first << normalize_double(row[p].second / coef);
-            }
-          }
-
-          size_t hash = hasher.get_hash();
-          auto [begin, end] = hashes[size].equal_range(hash);
-
-          for (auto itr = begin; itr != end; ++itr) {
-            consider_pair(i, itr->second);
-          }
-
-          hashes[size].emplace_hint(begin, hash, i);
-        }
-      }
+      traverse_row_combinations(i, 0, buffer, 0, hashes);
     }
   }
 
@@ -349,3 +364,5 @@ class Tables {
 };
 
 }  // namespace seekers
+
+// 1992169627
