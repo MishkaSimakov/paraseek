@@ -45,6 +45,7 @@ class Tables {
 
   constexpr static size_t max_diff = 2;
   const size_t groups_count;
+  const size_t max_small_row_size = max_diff * 3;
 
   Statistics statistics_;
 
@@ -52,7 +53,9 @@ class Tables {
   std::vector<std::pair<size_t, size_t>> result_;
 
   // Prepares double for hashing
-  static int normalize_double(double value) { return std::round(value * 1000); }
+  static int64_t normalize_double(double value) {
+    return std::round(value * 1e8);
+  }
 
   // Returns vector of (class hash, class size) sorted by size (desc)
   static std::vector<std::pair<size_t, size_t>> get_classes_sizes(
@@ -181,7 +184,7 @@ class Tables {
     std::unordered_map<size_t, size_t> classes_sizes;
 
     for (size_t i = 0; i < n; ++i) {
-      if (transposed_[i].size() <= max_diff * 2) {
+      if (transposed_[i].size() <= max_small_row_size) {
         // small rows are processed separately
         merged_classes[i] = 0;
       } else {
@@ -235,13 +238,26 @@ class Tables {
   void process_row(
       size_t row_index, const SparseVector<double>& row, size_t removed,
       std::vector<std::vector<std::pair<size_t, size_t>>>& hashes) {
-    RowHasher hasher(row.size());
+    RowHasher hasher(0);
 
-    for (const size_t index : row | std::views::keys) {
-      hasher << index;
+    for (const auto [index, value] : row) {
+      hasher << index << normalize_double(value / row[0].second);
     }
 
-    hashes[removed].emplace_back(hasher.get_hash(), row_index);
+    // if (row_index == 25265 || row_index == 80466) {
+    //   std::println("row index: {}, hash: {}", row_index, hasher.get_hash());
+    //
+    //   for (const auto [index, value] : row) {
+    //     std::print("  ({}, {:.6f})", index, value);
+    //   }
+    //   std::print("\n");
+    //   for (const auto [index, value] : row) {
+    //     std::print("  ({}, {:.6f})", index, value / row[0].second);
+    //   }
+    //   std::print("\n\n");
+    // }
+
+    hashes[row.size()].emplace_back(hasher.get_hash(), row_index);
   }
 
   void traverse_row_combinations(
@@ -256,7 +272,7 @@ class Tables {
     traverse_row_combinations(row, i + 1, current, removed, hashes);
     current.pop_back();
 
-    if (removed < max_diff && removed + 1 < transposed_[row].size()) {
+    if (removed < max_diff && removed + 2 < transposed_[row].size()) {
       traverse_row_combinations(row, i + 1, current, removed + 1, hashes);
     }
   }
@@ -303,44 +319,38 @@ class Tables {
 
   void seek_small() {
     // process small rows using hashing
-    size_t n = transposed_.size();
+    const size_t n = transposed_.size();
+    const size_t max_size = max_small_row_size + max_diff;
 
     size_t small_rows_cnt = 0;
     for (size_t i = 0; i < n; ++i) {
-      if (transposed_[i].size() > 3 * max_diff) {
+      if (transposed_[i].size() > max_size) {
         ++small_rows_cnt;
       }
     }
 
     // stores pairs of (hash, row index)
-    std::vector<std::vector<std::pair<size_t, size_t>>> hashes(max_diff + 1);
-    for (size_t i = 0; i <= max_diff; ++i) {
-      hashes[i].reserve(small_rows_cnt);
+    std::vector<std::vector<std::pair<size_t, size_t>>> hashes(max_size + 1);
+
+    for (size_t i = 0; i <= max_size; ++i) {
+      hashes.reserve(small_rows_cnt);
     }
 
     SparseVector<double> buffer;
 
     for (size_t i = 0; i < n; ++i) {
-      if (transposed_[i].size() > 3 * max_diff) {
-        continue;
+      if (transposed_[i].size() <= max_size) {
+        traverse_row_combinations(i, 0, buffer, 0, hashes);
       }
-
-      traverse_row_combinations(i, 0, buffer, 0, hashes);
     }
 
-    for (size_t i = 0; i <= max_diff; ++i) {
+    for (size_t i = 0; i <= max_size; ++i) {
       std::ranges::sort(hashes[i], {}, [](auto p) { return p.first; });
     }
 
     //
-    for (size_t i = 0; i <= max_diff; ++i) {
-      for (size_t j = i; j + i <= max_diff; ++j) {
-        if (i != j) {
-          compare_hashes(hashes[i], hashes[j]);
-        } else {
-          compare_hashes(hashes[i]);
-        }
-      }
+    for (size_t i = 0; i <= max_size; ++i) {
+      compare_hashes(hashes[i]);
     }
   }
 
@@ -423,6 +433,9 @@ class Tables {
     // TODO: add all rows such that:
     // transposed_[i].size() + transposed_[j].size() <= max_diff
 
+    // TODO: add all rows that intersect in exactly one element
+    // this can be done by traversing columns
+
     return unique;
   }
 
@@ -430,5 +443,3 @@ class Tables {
 };
 
 }  // namespace seekers
-
-// 1992169627

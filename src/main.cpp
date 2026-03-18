@@ -319,11 +319,11 @@ int main() {
   std::ofstream os("output.csv");
   std::println(os, "problem,found,considered");
 
-  for (size_t i = 0; i < 145; ++i) {
+  for (size_t i = 0; i < problems.size(); ++i) {
     const auto& problem_name = problems[i];
-    if (problem_name == "neos-4763324-toguru") {
-      continue;
-    }
+    // if (problem_name == "neos-4763324-toguru") {
+    // continue;
+    // }
 
     auto matrix = get_problem_matrix(problem_name);
 
@@ -333,7 +333,7 @@ int main() {
     // neos-4763324-toguru
     //  print_small_rows_cnt(matrix, 6);
 
-    auto seeker = seekers::Tables(10);
+    auto seeker = seekers::Tables(4);
     auto result = seeker.seek(matrix);
 
     std::println("  {}, {}", result.size(),
