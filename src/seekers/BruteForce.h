@@ -5,6 +5,7 @@
 
 #include "Checker.h"
 #include "matrix/CSCMatrix.h"
+#include "seekers/Statistics.h"
 #include "similarity/Jaccard.h"
 
 namespace seekers {
@@ -22,7 +23,9 @@ using BruteForceMode = std::variant<BruteForceJaccard, BruteForceHamming>;
 class BruteForce {
   const BruteForceMode mode;
 
-  static std::vector<std::pair<size_t, size_t>> seek_hamming(
+  Statistics statistics_;
+
+  std::vector<std::pair<size_t, size_t>> seek_hamming(
       const CSCMatrix<double>& matrix, size_t max_diff) {
     auto [n, d] = matrix.shape();
 
@@ -49,8 +52,14 @@ class BruteForce {
     }
 
     for (size_t i = 0; i < n; ++i) {
+      if (counts[i].second <= max_diff * 2) {
+        continue;
+      }
+
       for (size_t j = i + 1;
            j < n && counts[j].second <= counts[i].second + max_diff; ++j) {
+        ++statistics_.pairs_considered;
+
         size_t diff =
             similarity::hamming(rows[counts[i].first], rows[counts[j].first]);
 
@@ -63,7 +72,7 @@ class BruteForce {
     return result;
   }
 
-  static std::vector<std::pair<size_t, size_t>> seek_jaccard(
+  std::vector<std::pair<size_t, size_t>> seek_jaccard(
       const CSCMatrix<double>& matrix, double min_similarity) {
     auto [n, d] = matrix.shape();
 
@@ -79,6 +88,7 @@ class BruteForce {
 
     for (size_t i = 0; i < n; ++i) {
       for (size_t j = i + 1; j < n; ++j) {
+        ++statistics_.pairs_considered;
         double sim = similarity::jaccard(rows[i], rows[j]);
 
         if (sim >= min_similarity) {
@@ -101,6 +111,8 @@ class BruteForce {
     return seek_jaccard(matrix,
                         std::get<BruteForceJaccard>(mode).min_similarity);
   }
+
+  Statistics get_stats() const { return statistics_; }
 };
 
 }  // namespace seekers

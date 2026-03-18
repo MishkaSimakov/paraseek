@@ -6,6 +6,7 @@ add_executable(tests)
 
 target_sources(tests PUBLIC
         SimilarityTests.cpp
+        FastHammingTests.cpp
 )
 target_link_libraries(tests GTest::gtest_main paraseek)
 set_target_properties(tests PROPERTIES CMAKE_CXX_FLAGS "-fsanitize=address")

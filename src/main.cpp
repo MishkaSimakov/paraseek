@@ -4,8 +4,8 @@
 
 #include "ProblemMatrix.h"
 #include "seekers/BruteForce.h"
-#include "seekers/SimHash.h"
 #include "seekers/Tables.h"
+#include "similarity/ZipRows.h"
 
 static const std::vector<std::string> problems = {"markshare_4_0",
                                                   "markshare2",
@@ -125,38 +125,211 @@ static const std::vector<std::string> problems = {"markshare_4_0",
                                                   "momentum1",
                                                   "neos-950242",
                                                   "supportcase40",
-                                                  "fiball"};
+                                                  "fiball",
+                                                  "30n20b8",
+                                                  "neos-827175",
+                                                  "rmatr200-p5",
+                                                  "satellites2-60-fs",
+                                                  "unitcal_7",
+                                                  "leo1",
+                                                  "neos-1171448",
+                                                  "brazil3",
+                                                  "neos-5188808-nattai",
+                                                  "mzzv11",
+                                                  "chromaticindex512-7",
+                                                  "mzzv42z",
+                                                  "cmflsp50-24-8-8",
+                                                  "neos-1122047",
+                                                  "germanrr",
+                                                  "neos-5195221-niemur",
+                                                  "neos-933966",
+                                                  "n2seq36q",
+                                                  "neos-4300652-rahue",
+                                                  "neos-1354092",
+                                                  "mushroom-best",
+                                                  "neos-960392",
+                                                  "blp-ic98",
+                                                  "app1-2",
+                                                  "neos-662469",
+                                                  "blp-ar98",
+                                                  "nursesched-sprint02",
+                                                  "supportcase33",
+                                                  "thor50dday",
+                                                  "tbfp-network",
+                                                  "leo2",
+                                                  "lectsched-5-obj",
+                                                  "atlanta-ip",
+                                                  "neos-4763324-toguru",
+                                                  "sing326",
+                                                  "academictimetablesmall",
+                                                  "chromaticindex1024-7",
+                                                  "neos-2746589-doon",
+                                                  "sing44",
+                                                  "satellites2-40",
+                                                  "sp97ar",
+                                                  "cryptanalysiskb128n5obj14",
+                                                  "cryptanalysiskb128n5obj16",
+                                                  "neos-787933",
+                                                  "rocII-5-11",
+                                                  "neos-4722843-widden",
+                                                  "neos8",
+                                                  "uccase9",
+                                                  "ns1952667",
+                                                  "sorrell3",
+                                                  "n3div36",
+                                                  "neos-3988577-wolgan",
+                                                  "neos-873061",
+                                                  "opm2-z10-s4",
+                                                  "neos-860300",
+                                                  "rail01",
+                                                  "radiationm40-10-02",
+                                                  "fast0507",
+                                                  "ns1116954",
+                                                  "uccase12",
+                                                  "sp98ar",
+                                                  "hypothyroid-k1",
+                                                  "supportcase42",
+                                                  "snp-02-004-104",
+                                                  "rail507",
+                                                  "physiciansched6-2",
+                                                  "neos-957323",
+                                                  "proteindesign122trx11p8",
+                                                  "triptim1",
+                                                  "ex9",
+                                                  "irish-electricity",
+                                                  "neos-4532248-waihi",
+                                                  "map10",
+                                                  "map16715-04",
+                                                  "supportcase10",
+                                                  "neos-2987310-joes",
+                                                  "supportcase6",
+                                                  "netdiversion",
+                                                  "nursesched-medium-hint03",
+                                                  "proteindesign121hz512p9",
+                                                  "nw04",
+                                                  "rail02",
+                                                  "neos-4413714-turia",
+                                                  "neos-5093327-huahum",
+                                                  "buildingenergy",
+                                                  "neos-3555904-turama",
+                                                  "neos-631710",
+                                                  "var-smallemery-m6j6",
+                                                  "rd-rplusc-21",
+                                                  "roi2alpha3n4",
+                                                  "eilA101-2",
+                                                  "physiciansched3-3",
+                                                  "neos-848589",
+                                                  "ex10",
+                                                  "gfd-schedulen180f7d50m30k18",
+                                                  "bab6",
+                                                  "s250r10",
+                                                  "neos-5049753-cuanza",
+                                                  "highschool1-aigio",
+                                                  "k1mushroom",
+                                                  "splice1k1",
+                                                  "savsched1",
+                                                  "s100",
+                                                  "ns1760995",
+                                                  "co-100",
+                                                  "bab2",
+                                                  "neos-3402294-bobin",
+                                                  "neos-5104907-jarama",
+                                                  "ns1644855",
+                                                  "supportcase22",
+                                                  "supportcase12",
+                                                  "roi5alpha10n8",
+                                                  "supportcase7",
+                                                  "neos-4647030-tutaki",
+                                                  "neos-5114902-kasavu",
+                                                  "supportcase19",
+                                                  "neos-5052403-cygnet",
+                                                  "neos-2075418-temuka",
+                                                  "neos-3402454-bohle",
+                                                  "square41",
+                                                  "square47"};
+
+void print_result(const CSCMatrix<double>& matrix,
+                  const std::vector<std::pair<size_t, size_t>>& result) {
+  for (auto [i, j] : result) {
+    if (i > j) {
+      std::swap(i, j);
+    }
+
+    std::println("({}, {}):", i, j);
+
+    auto xs = matrix.get_row(i);
+    auto ys = matrix.get_row(j);
+
+    for (auto [i, x, y] : SparseZipRange{xs, ys}) {
+      std::print("{:8}", x);
+    }
+    std::print("\n");
+
+    for (auto [i, x, y] : SparseZipRange{xs, ys}) {
+      std::print("{:8}", y);
+    }
+    std::print("\n\n");
+  }
+}
+
+void print_small_rows_cnt(const CSCMatrix<double>& matrix, size_t count) {
+  auto [n, d] = matrix.shape();
+
+  std::vector<size_t> counts(n, 0);
+  for (size_t col = 0; col < d; ++col) {
+    for (auto [row, value] : matrix.get_column(col)) {
+      ++counts[row];
+    }
+  }
+
+  std::vector<size_t> counts_counts(d + 1, 0);
+  for (size_t row = 0; row < n; ++row) {
+    ++counts_counts[counts[row]];
+  }
+
+  for (size_t i = 1; i <= count && i < counts_counts.size(); ++i) {
+    std::println("  #{} - {}", i, counts_counts[i]);
+  }
+}
 
 int main() {
-  std::string problem_name = "neos-5114902-kasavu";
-  // for (const auto& problem_name : problems) {
-  auto matrix = get_problem_matrix(problem_name);
+  std::ofstream os("output.csv");
+  std::println(os, "problem,found,considered");
 
-  std::println("{}: {} x {}", problem_name, matrix.shape().first,
-               matrix.shape().second);
+  for (size_t i = 0; i < 145; ++i) {
+    const auto& problem_name = problems[i];
 
-  // auto bf_result =
-  // seekers::BruteForce(seekers::BruteForceHamming{2}).seek(matrix);
-  auto result = seekers::Tables().seek(matrix);
-  std::println("found: {} pairs", result.size());
-  // }
+    auto matrix = get_problem_matrix(problem_name);
 
-  // for (auto [i, j] : result) {
-  //   std::println("------------- ({}, {}) -------------", i, j);
+    std::println("{}/{} {} x {} ({})", i + 1, problems.size(),
+                 matrix.shape().first, matrix.shape().second, problem_name);
+
+    // print_small_rows_cnt(matrix, 6);
+
+    auto seeker = seekers::Tables(4);
+    auto result = seeker.seek(matrix);
+
+    // if (result.size() != seekers::BruteForce(seekers::BruteForceHamming{2})
+    //                          .seek(matrix)
+    //                          .size()) {
+    //   throw std::runtime_error("Wrong answer!");
+    // }
+
+    std::println(os, "{},{},{}", problem_name, result.size(),
+                 seeker.get_stats().pairs_considered);
+    //
+    // std::println(output, "{},{},{}", problem_name, 4,
+    //              seeker.get_stats().pairs_considered);
+    //
+    // output.flush();
+    // }
+  }
+
+  // std::println("----------   tables   ----------");
+  // print_result(matrix, result);
   //
-  //   auto i_row = matrix.get_row(i);
-  //   auto j_row = matrix.get_row(j);
-  //
-  //   for (auto [col, value] : i_row) {
-  //     std::print("({}, {}) ", col, value);
-  //   }
-  //   std::print("\n");
-  //
-  //   for (auto [col, value] : j_row) {
-  //     std::print("({}, {}) ", col, value);
-  //   }
-  //   std::print("\n\n");
-  // }
+  // std::println("---------- brute force ----------");
+  // print_result(matrix, bf_result);
 
   // auto sh_result = seekers::SimHash().seek(matrix, bf_result);
   // std::println("found: {} pairs", sh_result.size());

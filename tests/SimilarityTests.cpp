@@ -8,8 +8,8 @@ TEST(SimilarityTests, Hamming1) {
   const SparseVector<double> x = {{0, 1}, {1, 1}, {2, 1}};
   const SparseVector<double> y = {{0, 3}, {1, 3}, {2, 3}};
 
-  ASSERT_TRUE(similarity::hamming(x, y) == 0);
-  ASSERT_TRUE(similarity::hamming(y, x) == 0);
+  ASSERT_EQ(similarity::hamming(x, y), 0);
+  ASSERT_EQ(similarity::hamming(y, x), 0);
 }
 
 TEST(SimilarityTests, Hamming2) {
