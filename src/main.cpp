@@ -249,8 +249,15 @@ static const std::vector<std::string> problems = {"markshare_4_0",
                                                   "square47"};
 
 void print_result(const CSCMatrix<double>& matrix,
-                  const std::vector<std::pair<size_t, size_t>>& result) {
+                  const std::vector<std::pair<size_t, size_t>>& result,
+                  std::optional<size_t> max_cnt = std::nullopt) {
+  size_t cnt = 0;
+
   for (auto [i, j] : result) {
+    if (max_cnt && cnt > *max_cnt) {
+      return;
+    }
+
     if (i > j) {
       std::swap(i, j);
     }
@@ -269,7 +276,23 @@ void print_result(const CSCMatrix<double>& matrix,
       std::print("{:8}", y);
     }
     std::print("\n\n");
+
+    ++cnt;
   }
+}
+
+void print_diff(const CSCMatrix<double>& matrix,
+                const std::vector<std::pair<size_t, size_t>>& left,
+                const std::vector<std::pair<size_t, size_t>>& right) {
+  std::unordered_set left_set(left.begin(), left.end());
+  for (auto [a, b] : right) {
+    left_set.erase({a, b});
+    left_set.erase({b, a});
+  }
+
+  std::println("+ left:");
+  std::vector left_diff(left_set.begin(), left_set.end());
+  print_result(matrix, left_diff);
 }
 
 void print_small_rows_cnt(const CSCMatrix<double>& matrix, size_t count) {
@@ -296,34 +319,28 @@ int main() {
   std::ofstream os("output.csv");
   std::println(os, "problem,found,considered");
 
-  for (size_t i = 0; i < problems.size(); ++i) {
+  for (size_t i = 0; i < 145; ++i) {
     const auto& problem_name = problems[i];
+    if (problem_name == "neos-4763324-toguru") {
+      continue;
+    }
 
     auto matrix = get_problem_matrix(problem_name);
 
     std::println("{}/{} {} x {} ({})", i + 1, problems.size(),
                  matrix.shape().first, matrix.shape().second, problem_name);
 
-    // print_small_rows_cnt(matrix, 6);
+    // neos-4763324-toguru
+    //  print_small_rows_cnt(matrix, 6);
 
-    auto seeker = seekers::Tables(4);
+    auto seeker = seekers::Tables(10);
     auto result = seeker.seek(matrix);
 
-    // if (result.size() != seekers::BruteForce(seekers::BruteForceHamming{2})
-    //                          .seek(matrix)
-    //                          .size()) {
-    //   throw std::runtime_error("Wrong answer!");
-    // }
+    std::println("  {}, {}", result.size(),
+                 seeker.get_stats().pairs_considered);
 
     std::println(os, "{},{},{}", problem_name, result.size(),
                  seeker.get_stats().pairs_considered);
-
-    //
-    // std::println(output, "{},{},{}", problem_name, 4,
-    //              seeker.get_stats().pairs_considered);
-    //
-    // output.flush();
-    // }
   }
 
   // std::println("----------   tables   ----------");

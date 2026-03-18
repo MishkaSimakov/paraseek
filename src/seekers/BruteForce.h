@@ -52,10 +52,6 @@ class BruteForce {
     }
 
     for (size_t i = 0; i < n; ++i) {
-      if (counts[i].second <= max_diff * 2) {
-        continue;
-      }
-
       for (size_t j = i + 1;
            j < n && counts[j].second <= counts[i].second + max_diff; ++j) {
         ++statistics_.pairs_considered;

@@ -199,8 +199,12 @@ class MPSReader {
         for (size_t i = 2; i < parts.size(); i += 2) {
           std::string row_name = parts[i];
 
-          if (row_name.empty() || row_name == objective_row_) {
+          if (row_name.empty()) {
             break;
+          }
+
+          if (row_name == objective_row_) {
+            continue;
           }
 
           auto [itr, _] =

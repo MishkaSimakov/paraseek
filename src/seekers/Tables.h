@@ -49,7 +49,7 @@ class Tables {
   Statistics statistics_;
 
   std::vector<SparseVector<double>> transposed_;
-  std::unordered_set<std::pair<size_t, size_t>> result_;
+  std::vector<std::pair<size_t, size_t>> result_;
 
   // Prepares double for hashing
   static int normalize_double(double value) { return std::round(value * 1000); }
@@ -121,11 +121,19 @@ class Tables {
     return blocks;
   }
 
+  void add_to_answer(size_t i, size_t j) {
+    if (i > j) {
+      std::swap(i, j);
+    }
+
+    result_.emplace_back(i, j);
+  }
+
   void consider_pair(size_t i, size_t j) {
     ++statistics_.pairs_considered;
 
     if (similarity::hamming(transposed_[i], transposed_[j]) <= max_diff) {
-      result_.emplace(i, j);
+      add_to_answer(i, j);
     } else {
       // std::println("({}, {}):", i, j);
       //
@@ -152,12 +160,12 @@ class Tables {
       double ratio = front[i] / front[j];
       if (similarity::hamming_fixed_ratio(transposed_[i], transposed_[j],
                                           ratio) <= max_diff) {
-        result_.emplace(i, j);
+        add_to_answer(i, j);
       }
     } else {
       if (similarity::fast_hamming(transposed_[i], transposed_[j]) <=
           max_diff) {
-        result_.emplace(i, j);
+        add_to_answer(i, j);
       }
     }
   }
@@ -226,28 +234,19 @@ class Tables {
 
   void process_row(
       size_t row_index, const SparseVector<double>& row, size_t removed,
-      std::vector<std::unordered_multimap<size_t, size_t>>& hashes) {
+      std::vector<std::vector<std::pair<size_t, size_t>>>& hashes) {
     RowHasher hasher(row.size());
 
     for (const size_t index : row | std::views::keys) {
       hasher << index;
     }
 
-    size_t hash = hasher.get_hash();
-    auto [begin, end] = hashes[max_diff - removed].equal_range(hash);
-
-    for (auto itr = begin; itr != end; ++itr) {
-      consider_pair(row_index, itr->second);
-    }
-
-    for (size_t i = removed; i <= max_diff; ++i) {
-      hashes[i].emplace(hash, row_index);
-    }
+    hashes[removed].emplace_back(hasher.get_hash(), row_index);
   }
 
   void traverse_row_combinations(
       size_t row, size_t i, SparseVector<double>& current, size_t removed,
-      std::vector<std::unordered_multimap<size_t, size_t>>& hashes) {
+      std::vector<std::vector<std::pair<size_t, size_t>>>& hashes) {
     if (i == transposed_[row].size()) {
       process_row(row, current, removed, hashes);
       return;
@@ -257,8 +256,48 @@ class Tables {
     traverse_row_combinations(row, i + 1, current, removed, hashes);
     current.pop_back();
 
-    if (removed < max_diff) {
+    if (removed < max_diff && removed + 1 < transposed_[row].size()) {
       traverse_row_combinations(row, i + 1, current, removed + 1, hashes);
+    }
+  }
+
+  void compare_hashes(const std::vector<std::pair<size_t, size_t>>& left,
+                      const std::vector<std::pair<size_t, size_t>>& right) {
+    size_t current_hash = 0;
+    size_t right_begin = 0;
+    size_t right_end = 0;
+
+    for (size_t i = 0; i < left.size(); ++i) {
+      if (left[i].first != current_hash || i == 0) {
+        // update right_begin and right_end
+        right_begin = right_end;
+
+        while (right_begin < right.size() &&
+               right[right_begin].first < left[i].first) {
+          ++right_begin;
+        }
+
+        right_end = right_begin;
+        while (right_end < right.size() &&
+               right[right_end].first <= left[i].first) {
+          ++right_end;
+        }
+
+        current_hash = left[i].first;
+      }
+
+      for (size_t j = right_begin; j < right_end; ++j) {
+        consider_pair(left[i].second, right[j].second);
+      }
+    }
+  }
+
+  void compare_hashes(const std::vector<std::pair<size_t, size_t>>& hashes) {
+    for (size_t i = 0; i < hashes.size(); ++i) {
+      for (size_t j = i + 1;
+           j < hashes.size() && hashes[i].first == hashes[j].first; ++j) {
+        consider_pair(hashes[i].second, hashes[j].second);
+      }
     }
   }
 
@@ -274,9 +313,9 @@ class Tables {
     }
 
     // stores pairs of (hash, row index)
-    std::vector<std::unordered_multimap<size_t, size_t>> hashes(max_diff + 1);
+    std::vector<std::vector<std::pair<size_t, size_t>>> hashes(max_diff + 1);
     for (size_t i = 0; i <= max_diff; ++i) {
-      hashes[i].reserve(small_rows_cnt * 3);
+      hashes[i].reserve(small_rows_cnt);
     }
 
     SparseVector<double> buffer;
@@ -287,6 +326,21 @@ class Tables {
       }
 
       traverse_row_combinations(i, 0, buffer, 0, hashes);
+    }
+
+    for (size_t i = 0; i <= max_diff; ++i) {
+      std::ranges::sort(hashes[i], {}, [](auto p) { return p.first; });
+    }
+
+    //
+    for (size_t i = 0; i <= max_diff; ++i) {
+      for (size_t j = i; j + i <= max_diff; ++j) {
+        if (i != j) {
+          compare_hashes(hashes[i], hashes[j]);
+        } else {
+          compare_hashes(hashes[i]);
+        }
+      }
     }
   }
 
@@ -350,14 +404,26 @@ class Tables {
     std::vector<bool> mask(groups_count, false);
     std::fill_n(mask.begin(), selected_groups_count, true);
 
-    // do {
-    //   seek_table(matrix, mask, blocks, groups);
-    // } while (std::ranges::prev_permutation(mask).found);
+    do {
+      seek_table(matrix, mask, blocks, groups);
+    } while (std::ranges::prev_permutation(mask).found);
 
+    std::println("  finished big rows");
     // now process small rows
     seek_small();
 
-    return {result_.begin(), result_.end()};
+    std::println("  finished small rows");
+
+    // remove duplicates from the result
+    std::ranges::sort(result_);
+
+    std::vector<std::pair<size_t, size_t>> unique;
+    std::ranges::unique_copy(result_, std::back_inserter(unique));
+
+    // TODO: add all rows such that:
+    // transposed_[i].size() + transposed_[j].size() <= max_diff
+
+    return unique;
   }
 
   Statistics get_stats() const { return statistics_; }
