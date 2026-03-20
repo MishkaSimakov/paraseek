@@ -15,6 +15,39 @@
 
 namespace seekers {
 
+std::unordered_set<std::pair<size_t, size_t>> normalize_tables_result(
+    const std::vector<std::pair<size_t, size_t>>& singular,
+    const std::vector<std::pair<std::vector<size_t>, std::vector<size_t>>>&
+        bipartite) {
+  std::unordered_set<std::pair<size_t, size_t>> result;
+
+  for (auto [i, j] : singular) {
+    if (i > j) {
+      result.emplace(j, i);
+    } else {
+      result.emplace(i, j);
+    }
+  }
+
+  for (const auto& [left, right] : bipartite) {
+    for (size_t i : left) {
+      for (size_t j : right) {
+        if (i == j) {
+          continue;
+        }
+
+        if (i > j) {
+          result.emplace(j, i);
+        } else {
+          result.emplace(i, j);
+        }
+      }
+    }
+  }
+
+  return result;
+}
+
 // https://stackoverflow.com/questions/20511347/a-good-hash-function-for-a-vector/72073933
 class RowHasher {
   uint32_t hash_;
@@ -37,24 +70,32 @@ class RowHasher {
   uint32_t get_hash() const { return hash_; }
 };
 
+struct TablesParameters {
+  size_t groups_count;
+  size_t max_small_row_size;
+};
+
 class Tables {
   struct Block {
     size_t class_id;
     double front;
   };
 
-  constexpr static size_t max_diff = 2;
+  const size_t max_diff;
   const size_t groups_count;
-  const size_t max_small_row_size = max_diff * 3;
+  const size_t max_small_row_size;
 
   Statistics statistics_;
 
   std::vector<SparseVector<double>> transposed_;
-  std::vector<std::pair<size_t, size_t>> result_;
+
+  std::vector<std::pair<size_t, size_t>> result_singular_;
+  std::vector<std::pair<std::vector<size_t>, std::vector<size_t>>>
+      result_bipartite_;
 
   // Prepares double for hashing
   static int64_t normalize_double(double value) {
-    return std::round(value * 1e8);
+    return std::round(value * 1e10);
   }
 
   // Returns vector of (class hash, class size) sorted by size (desc)
@@ -92,7 +133,7 @@ class Tables {
       blocks[i].resize(groups.size(), Block{0, 0});
     }
 
-    std::unordered_map<std::pair<size_t, int>, size_t> map;
+    std::unordered_map<std::pair<size_t, int64_t>, size_t> map;
 
     for (size_t group_id = 0; group_id < groups.size(); ++group_id) {
       size_t classes_cnt = 1;
@@ -105,7 +146,7 @@ class Tables {
             blocks[row][group_id].front = value;
           }
 
-          int normalized =
+          auto normalized =
               normalize_double(value / blocks[row][group_id].front);
 
           auto [itr, new_class] =
@@ -129,7 +170,7 @@ class Tables {
       std::swap(i, j);
     }
 
-    result_.emplace_back(i, j);
+    result_singular_.emplace_back(i, j);
   }
 
   void consider_pair(size_t i, size_t j) {
@@ -279,86 +320,197 @@ class Tables {
 
   void compare_hashes(const std::vector<std::pair<size_t, size_t>>& left,
                       const std::vector<std::pair<size_t, size_t>>& right) {
-    size_t current_hash = 0;
+    size_t right_hash = 0;
     size_t right_begin = 0;
     size_t right_end = 0;
 
-    for (size_t i = 0; i < left.size(); ++i) {
-      if (left[i].first != current_hash || i == 0) {
+    size_t left_begin = 0;
+    size_t left_end = 0;
+
+    while (left_begin < left.size()) {
+      size_t left_hash = left[left_begin].first;
+
+      while (left_end < left.size() && left[left_end].first == left_hash) {
+        ++left_end;
+      }
+
+      if (left_hash != right_hash || left_begin == 0) {
         // update right_begin and right_end
         right_begin = right_end;
 
         while (right_begin < right.size() &&
-               right[right_begin].first < left[i].first) {
+               right[right_begin].first < left_hash) {
           ++right_begin;
         }
 
         right_end = right_begin;
         while (right_end < right.size() &&
-               right[right_end].first <= left[i].first) {
+               right[right_end].first <= left_hash) {
           ++right_end;
         }
 
-        current_hash = left[i].first;
+        right_hash = left_hash;
       }
 
-      for (size_t j = right_begin; j < right_end; ++j) {
-        consider_pair(left[i].second, right[j].second);
+      if (right_begin == right_end) {
+        left_begin = left_end;
+        continue;
       }
+
+      std::vector<size_t> left_elements(left_end - left_begin);
+      std::vector<size_t> right_elements(right_end - right_begin);
+
+      for (size_t i = left_begin; i < left_end; ++i) {
+        left_elements[i - left_begin] = left[i].second;
+      }
+
+      for (size_t i = right_begin; i < right_end; ++i) {
+        right_elements[i - right_begin] = right[i].second;
+      }
+
+      result_bipartite_.emplace_back(std::move(left_elements),
+                                     std::move(right_elements));
+
+      left_begin = left_end;
     }
   }
 
-  void compare_hashes(const std::vector<std::pair<size_t, size_t>>& hashes) {
-    for (size_t i = 0; i < hashes.size(); ++i) {
-      for (size_t j = i + 1;
-           j < hashes.size() && hashes[i].first == hashes[j].first; ++j) {
-        consider_pair(hashes[i].second, hashes[j].second);
-      }
-    }
-  }
+  // TODO: cnt_0 and cnt_1 are small, maybe transform them into uint8_t
+  // or even merge into one uint8_t
+  // for every entry cnt_0 + cnt_1 <= max_diff
+  struct SmallRowEntry {
+    size_t cnt_0 = 0;
+    size_t cnt_1 = 0;
 
-  void seek_small() {
-    // process small rows using hashing
-    const size_t n = transposed_.size();
+    size_t class_id = 0;
+
+    double front = 0;
+  };
+
+  void seek_small(const CSCMatrix<double>& matrix) {
+    const auto [n, d] = matrix.shape();
     const size_t max_size = max_small_row_size + max_diff;
 
-    size_t small_rows_cnt = 0;
+    std::vector<std::vector<SmallRowEntry>> rows(n);
     for (size_t i = 0; i < n; ++i) {
-      if (transposed_[i].size() > max_size) {
-        ++small_rows_cnt;
+      rows[i].push_back(SmallRowEntry{
+          .cnt_0 = 0,
+          .cnt_1 = 0,
+          .class_id = 0,
+          .front = 0,
+      });
+    }
+
+    size_t class_cnt = 1;
+    std::unordered_map<std::pair<size_t, int64_t>, size_t> map;
+
+    auto get_class = [&](size_t prev_class, int64_t norm_value) {
+      const auto [itr, inserted] =
+          map.emplace(std::pair{prev_class, norm_value}, class_cnt);
+
+      if (inserted) {
+        ++class_cnt;
+      }
+
+      return itr->second;
+    };
+
+    for (size_t col = 0; col < d; ++col) {
+      map.clear();
+
+      for (auto [row, value] : matrix.get_column(col)) {
+        if (transposed_[row].size() > max_size) {
+          continue;
+        }
+
+        auto& entries = rows[row];
+        std::vector<SmallRowEntry> new_entries;
+
+        for (auto& entry : entries) {
+          if (entry.cnt_0 + entry.cnt_1 < max_diff) {
+            // class 0 (create new entry)
+            {
+              SmallRowEntry new_entry = entry;
+              ++new_entry.cnt_0;
+
+              new_entries.push_back(new_entry);
+            }
+
+            // class 1 (create new entry)
+            {
+              SmallRowEntry new_entry = entry;
+              ++new_entry.cnt_1;
+              new_entry.class_id = get_class(entry.class_id, 1);
+
+              new_entries.push_back(new_entry);
+            }
+          }
+
+          // class 2 (update current entry)
+          if (entry.front == 0) {
+            entry.front = value;
+          }
+
+          auto normalized = normalize_double(value / entry.front);
+          entry.class_id = get_class(entry.class_id, normalized);
+        }
+
+        entries.append_range(new_entries);
       }
     }
 
-    // stores pairs of (hash, row index)
-    std::vector<std::vector<std::pair<size_t, size_t>>> hashes(max_size + 1);
-
-    for (size_t i = 0; i <= max_size; ++i) {
-      hashes.reserve(small_rows_cnt);
+    std::vector<std::vector<std::vector<std::pair<size_t, size_t>>>> m(
+        max_diff + 1);
+    for (size_t i = 0; i <= max_diff; ++i) {
+      m[i].resize(max_diff + 1);
     }
 
-    SparseVector<double> buffer;
+    for (size_t row = 0; row < n; ++row) {
+      if (transposed_[row].size() > max_size) {
+        continue;
+      }
 
-    for (size_t i = 0; i < n; ++i) {
-      if (transposed_[i].size() <= max_size) {
-        traverse_row_combinations(i, 0, buffer, 0, hashes);
+      for (const auto entry : rows[row]) {
+        m[entry.cnt_0][entry.cnt_1].emplace_back(entry.class_id, row);
       }
     }
 
-    for (size_t i = 0; i <= max_size; ++i) {
-      std::ranges::sort(hashes[i], {}, [](auto p) { return p.first; });
+    for (size_t i = 0; i <= max_diff; ++i) {
+      for (size_t j = 0; j <= max_diff; ++j) {
+        std::ranges::sort(m[i][j], {}, [](auto p) { return p.first; });
+      }
     }
 
-    //
-    for (size_t i = 0; i <= max_size; ++i) {
-      compare_hashes(hashes[i]);
+    for (size_t i = 0; i <= max_diff; ++i) {
+      for (size_t j = i; i + j <= max_diff; ++j) {
+        for (size_t k = 0; i + j + k <= max_diff; ++k) {
+          compare_hashes(m[i][k], m[j][k]);
+        }
+      }
     }
   }
 
  public:
-  // max_diff = 2
-  explicit Tables(size_t groups_count) : groups_count(groups_count) {}
+  explicit Tables(size_t max_diff)
+      : max_diff(max_diff),
+        groups_count(max_diff * 2),
+        max_small_row_size(max_diff * 2) {
+    if (max_diff != 2) {
+      throw std::runtime_error("Not implemented");
+    }
+  }
 
-  std::vector<std::pair<size_t, size_t>> seek(const CSCMatrix<double>& matrix) {
+  // max_diff = 2
+  explicit Tables(size_t max_diff, TablesParameters params)
+      : max_diff(max_diff),
+        groups_count(params.groups_count),
+        max_small_row_size(params.max_small_row_size) {
+    if (max_diff != 2) {
+      throw std::runtime_error("Not implemented");
+    }
+  }
+
+  auto seek(const CSCMatrix<double>& matrix) {
     const size_t selected_groups_count = groups_count - max_diff;
 
     auto [n, d] = matrix.shape();
@@ -418,25 +570,26 @@ class Tables {
       seek_table(matrix, mask, blocks, groups);
     } while (std::ranges::prev_permutation(mask).found);
 
-    std::println("  finished big rows");
+    // std::println("  finished big rows");
     // now process small rows
-    seek_small();
+    // seek_small();
 
-    std::println("  finished small rows");
+    // std::println("  finished small rows");
 
     // remove duplicates from the result
-    std::ranges::sort(result_);
+    std::ranges::sort(result_singular_);
 
     std::vector<std::pair<size_t, size_t>> unique;
-    std::ranges::unique_copy(result_, std::back_inserter(unique));
+    std::ranges::unique_copy(result_singular_, std::back_inserter(unique));
 
     // TODO: add all rows such that:
     // transposed_[i].size() + transposed_[j].size() <= max_diff
 
     // TODO: add all rows that intersect in exactly one element
     // this can be done by traversing columns
+    seek_small(matrix);
 
-    return unique;
+    return std::pair{std::move(unique), std::move(result_bipartite_)};
   }
 
   Statistics get_stats() const { return statistics_; }

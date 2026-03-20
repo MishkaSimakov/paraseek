@@ -24,6 +24,26 @@ class CSCMatrix {
   explicit CSCMatrix(size_t height)
       : index_pointers_(1, 0), rows_cnt_(height) {}
 
+  explicit CSCMatrix(const Matrix<Field>& matrix)
+      : index_pointers_(matrix.get_width() + 1),
+        rows_cnt_(matrix.get_height()) {
+    auto [n, d] = matrix.shape();
+
+    index_pointers_[0] = 0;
+    size_t nonzero_cnt = 0;
+
+    for (size_t col = 0; col < d; ++col) {
+      for (size_t row = 0; row < n; ++row) {
+        if (FieldTraits<Field>::is_nonzero(matrix[row, col])) {
+          entries_.emplace_back(row, matrix[row, col]);
+          ++nonzero_cnt;
+        }
+      }
+
+      index_pointers_[col + 1] = nonzero_cnt;
+    }
+  }
+
   CSCMatrix(const std::initializer_list<std::initializer_list<Field>>& values)
       : CSCMatrix(Matrix<Field>(values)) {}
 

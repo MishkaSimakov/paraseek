@@ -4,6 +4,7 @@ target_sources(paraseek PUBLIC
         similarity/Hamming.cpp
         similarity/Jaccard.cpp
         similarity/Union.cpp
+        ProblemsNames.cpp
 )
 target_include_directories(paraseek PUBLIC .)
 
