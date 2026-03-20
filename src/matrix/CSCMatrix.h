@@ -140,6 +140,20 @@ class CSCMatrix {
       }
     }
   }
+
+  std::vector<SparseVector<Field>> get_transposed() const {
+    const auto [n, d] = shape();
+
+    std::vector<SparseVector<Field>> result(n);
+
+    for (size_t col = 0; col < d; ++col) {
+      for (auto [row, value] : get_column(col)) {
+        result[row].emplace_back(col, value);
+      }
+    }
+
+    return result;
+  }
 };
 
 template <typename Field>

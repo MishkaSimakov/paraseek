@@ -1,0 +1,2 @@
+add_executable(paraseek_playground_solve_all solve_all.cpp)
+target_link_libraries(paraseek_playground_solve_all PUBLIC paraseek)

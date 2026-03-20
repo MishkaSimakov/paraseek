@@ -1,4 +1,4 @@
-#include "Hamming.h"
+#include "utils/Hamming.h"
 
 #include "ZipRows.h"
 

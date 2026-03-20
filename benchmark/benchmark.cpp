@@ -1,6 +1,6 @@
 #include <benchmark/benchmark.h>
 
-#include "ProblemMatrix.h"
+#include "../src/problems/ProblemMatrix.h"
 #include "seekers/BruteForce.h"
 #include "seekers/Tables.h"
 
@@ -132,7 +132,7 @@ static void benchmark_brute_force(benchmark::State& state) {
   state.ResumeTiming();
 
   for (auto _ : state) {
-    seekers::BruteForce(seekers::BruteForceHamming{2}).seek(matrix);
+    seekers::BruteForce(2).seek(matrix);
   }
 
   state.SetComplexityN(matrix.nonzero_count());
@@ -146,7 +146,7 @@ static void benchmark_tables(benchmark::State& state) {
   state.ResumeTiming();
 
   for (auto _ : state) {
-    seekers::Tables().seek(matrix);
+    seekers::Tables(2).seek(matrix);
   }
 
   state.SetComplexityN(matrix.nonzero_count());

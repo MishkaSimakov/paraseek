@@ -3,10 +3,9 @@
 #include <algorithm>
 #include <vector>
 
-#include "Checker.h"
 #include "matrix/CSCMatrix.h"
 #include "seekers/Statistics.h"
-#include "similarity/Jaccard.h"
+#include "utils/Hamming.h"
 
 namespace seekers {
 

@@ -2,9 +2,9 @@
 
 #include <format>
 
+#include "../matrix/CSCMatrix.h"
+#include "../utils/Paths.h"
 #include "MPS.h"
-#include "matrix/CSCMatrix.h"
-#include "utils/Paths.h"
 
 inline CSCMatrix<double> get_problem_matrix(std::string name) {
   auto archive_path = paths::problem(name + ".mps.gz");

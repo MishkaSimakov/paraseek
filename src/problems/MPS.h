@@ -8,8 +8,8 @@
 #include <sstream>
 #include <unordered_map>
 
-#include "matrix/CSCMatrix.h"
-#include "utils/String.h"
+#include "../matrix/CSCMatrix.h"
+#include "../utils/String.h"
 
 enum class MPSFieldsMode { FIXED_WIDTH, SPACE_SEPARATED };
 

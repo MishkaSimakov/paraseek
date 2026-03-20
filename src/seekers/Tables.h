@@ -7,10 +7,10 @@
 #include <unordered_set>
 #include <vector>
 
+#include "../utils/Hamming.h"
+#include "../utils/ZipRows.h"
 #include "matrix/CSCMatrix.h"
 #include "seekers/Statistics.h"
-#include "similarity/Hamming.h"
-#include "similarity/ZipRows.h"
 #include "utils/Hashers.h"
 
 namespace seekers {
@@ -98,30 +98,6 @@ class Tables {
     return std::round(value * 1e10);
   }
 
-  // Returns vector of (class hash, class size) sorted by size (desc)
-  static std::vector<std::pair<size_t, size_t>> get_classes_sizes(
-      const std::vector<size_t>& classes) {
-    std::unordered_map<size_t, size_t> counts;
-    for (size_t c : classes) {
-      ++counts[c];
-    }
-
-    std::vector<std::pair<size_t, size_t>> sizes(counts.begin(), counts.end());
-    std::ranges::sort(sizes, {},
-                      [&](auto p) { return -static_cast<int>(p.second); });
-
-    return sizes;
-  }
-
-  static void print_top_classes(const std::vector<size_t>& classes,
-                                size_t count) {
-    auto sizes = get_classes_sizes(classes);
-
-    for (size_t i = 0; i < count && i < sizes.size(); ++i) {
-      std::println("  {} {}", sizes[i].second, sizes[i].first);
-    }
-  }
-
   // For each row a list of blocks is returned
   static std::vector<std::vector<Block>> get_blocks(
       const CSCMatrix<double>& matrix,
@@ -173,31 +149,7 @@ class Tables {
     result_singular_.emplace_back(i, j);
   }
 
-  void consider_pair(size_t i, size_t j) {
-    ++statistics_.pairs_considered;
-
-    if (similarity::hamming(transposed_[i], transposed_[j]) <= max_diff) {
-      add_to_answer(i, j);
-    } else {
-      // std::println("({}, {}):", i, j);
-      //
-      // auto xs = transposed_[i];
-      // auto ys = transposed_[j];
-      //
-      // for (auto [i, x, y] : SparseZipRange{xs, ys}) {
-      //   std::print("{:8} ", x);
-      // }
-      // std::print("\n");
-      //
-      // for (auto [i, x, y] : SparseZipRange{xs, ys}) {
-      //   std::print("{:8} ", y);
-      // }
-      // std::print("\n\n");
-    }
-  }
-
-  void consider_pair_fast(size_t i, size_t j,
-                          const std::vector<double>& front) {
+  void consider_pair(size_t i, size_t j, const std::vector<double>& front) {
     ++statistics_.pairs_considered;
 
     if (front[i] != 0) {
@@ -259,62 +211,16 @@ class Tables {
       indices[--classes_sizes[merged_classes[i]]] = i;
     }
 
-    // for each class remaining positions must be checked
-    // print_top_classes(merged_classes, 5);
-
     for (size_t i = 0; i < n; ++i) {
       if (merged_classes[indices[i]] == 0) {
         continue;
       }
 
-      // process class using full pairwise search
       for (size_t j = i + 1;
            j < n && merged_classes[indices[j]] == merged_classes[indices[i]];
            ++j) {
-        consider_pair_fast(indices[i], indices[j], front);
+        consider_pair(indices[i], indices[j], front);
       }
-    }
-  }
-
-  void process_row(
-      size_t row_index, const SparseVector<double>& row, size_t removed,
-      std::vector<std::vector<std::pair<size_t, size_t>>>& hashes) {
-    RowHasher hasher(0);
-
-    for (const auto [index, value] : row) {
-      hasher << index << normalize_double(value / row[0].second);
-    }
-
-    // if (row_index == 25265 || row_index == 80466) {
-    //   std::println("row index: {}, hash: {}", row_index, hasher.get_hash());
-    //
-    //   for (const auto [index, value] : row) {
-    //     std::print("  ({}, {:.6f})", index, value);
-    //   }
-    //   std::print("\n");
-    //   for (const auto [index, value] : row) {
-    //     std::print("  ({}, {:.6f})", index, value / row[0].second);
-    //   }
-    //   std::print("\n\n");
-    // }
-
-    hashes[row.size()].emplace_back(hasher.get_hash(), row_index);
-  }
-
-  void traverse_row_combinations(
-      size_t row, size_t i, SparseVector<double>& current, size_t removed,
-      std::vector<std::vector<std::pair<size_t, size_t>>>& hashes) {
-    if (i == transposed_[row].size()) {
-      process_row(row, current, removed, hashes);
-      return;
-    }
-
-    current.push_back(transposed_[row][i]);
-    traverse_row_combinations(row, i + 1, current, removed, hashes);
-    current.pop_back();
-
-    if (removed < max_diff && removed + 2 < transposed_[row].size()) {
-      traverse_row_combinations(row, i + 1, current, removed + 1, hashes);
     }
   }
 
@@ -514,51 +420,14 @@ class Tables {
     const size_t selected_groups_count = groups_count - max_diff;
 
     auto [n, d] = matrix.shape();
-    std::vector<size_t> permutation(d);
+    transposed_ = matrix.get_transposed();
 
-    transposed_.resize(n);
-    for (size_t col = 0; col < d; ++col) {
-      for (auto [row, value] : matrix.get_column(col)) {
-        transposed_[row].emplace_back(col, value);
-      }
-    }
-
-    // find groups
-    // for each rows stores a bitmask:
-    // bit i is zero for row j if j-th row is empty in i-th group
-    std::vector<uint32_t> zero_rows(n, 0);
+    //
     std::vector<std::vector<size_t>> groups(groups_count);
 
+    // TODO: maybe implement some algorithm for choosing groups
     for (size_t col = 0; col < d; ++col) {
-      bool found_any = false;
-
-      // for (auto [row, _] : matrix.get_column(col)) {
-      //   // if there is a group without elements in this row, add this column
-      //   // into this group
-      //   if (zero_rows[row] != (1 << groups_count) - 1) {
-      //     for (size_t i = 0; i < groups_count; ++i) {
-      //       size_t group = (i + col) % groups_count;
-      //
-      //       if ((zero_rows[row] >> group & 1) == 0) {
-      //         // add this column to group
-      //         found_any = true;
-      //         groups[group].push_back(col);
-      //
-      //         for (auto [j, _] : matrix.get_column(col)) {
-      //           zero_rows[j] |= 1 << group;
-      //         }
-      //
-      //         break;
-      //       }
-      //     }
-      //
-      //     break;
-      //   }
-      // }
-
-      if (!found_any) {
-        groups[col % groups_count].push_back(col);
-      }
+      groups[std::hash<size_t>()(col) % groups_count].push_back(col);
     }
 
     auto blocks = get_blocks(matrix, groups);
@@ -570,23 +439,13 @@ class Tables {
       seek_table(matrix, mask, blocks, groups);
     } while (std::ranges::prev_permutation(mask).found);
 
-    // std::println("  finished big rows");
-    // now process small rows
-    // seek_small();
-
-    // std::println("  finished small rows");
-
-    // remove duplicates from the result
+    // remove duplicates from the singular part of the result
     std::ranges::sort(result_singular_);
 
     std::vector<std::pair<size_t, size_t>> unique;
     std::ranges::unique_copy(result_singular_, std::back_inserter(unique));
 
-    // TODO: add all rows such that:
-    // transposed_[i].size() + transposed_[j].size() <= max_diff
-
-    // TODO: add all rows that intersect in exactly one element
-    // this can be done by traversing columns
+    // process all small rows
     seek_small(matrix);
 
     return std::pair{std::move(unique), std::move(result_bipartite_)};
