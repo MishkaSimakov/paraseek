@@ -24,6 +24,123 @@ namespace seekers {
  * Your favors nor your hate.
  */
 
+// TODO: cnt_0 and cnt_1 are small, maybe transform them into uint8_t
+// or even merge into one uint8_t
+// for every entry cnt_0 + cnt_1 <= max_diff
+struct SmallRowEntry {
+  size_t cnt_0 = 0;
+  size_t cnt_1 = 0;
+
+  size_t class_id = 0;
+
+  double front = 0;
+};
+
+class ClassesStorage {
+  struct ClassInfo {
+    size_t map_column{0};
+    std::unordered_map<int64_t, size_t> map;
+    std::vector<size_t> counts;
+  };
+
+  std::vector<size_t> free_classes_;
+  std::vector<ClassInfo> classes_;
+
+  const size_t max_diff;
+
+  void extend_classes_storage(size_t new_size) {
+    size_t old_size = classes_.size();
+    classes_.resize(new_size);
+
+    for (size_t i = old_size; i < new_size; ++i) {
+      classes_[i].counts.resize((max_diff + 1) * (max_diff + 1), 0);
+      free_classes_.push_back(i);
+    }
+  }
+
+ public:
+  ClassesStorage(size_t max_diff, size_t rows_count) : max_diff(max_diff) {
+    extend_classes_storage(std::max(rows_count, 64uz));
+  }
+
+  size_t& get_rows_count(size_t class_id, size_t cnt_0, size_t cnt_1) {
+    return classes_[class_id].counts[cnt_0 * (max_diff + 1) + cnt_1];
+  }
+
+  size_t& get_rows_count(const SmallRowEntry entry) {
+    return get_rows_count(entry.class_id, entry.cnt_0, entry.cnt_1);
+  }
+
+  void try_free_class(size_t class_id) {
+    bool is_zero = true;
+
+    for (const size_t count : classes_[class_id].counts) {
+      if (count != 0) {
+        is_zero = false;
+        break;
+      }
+    }
+
+    if (is_zero) {
+      free_classes_.push_back(class_id);
+    }
+  }
+
+  size_t get_class(size_t prev_class, int64_t value, size_t column) {
+    if (free_classes_.empty()) {
+      extend_classes_storage(classes_.size() * 2);
+    }
+
+    if (classes_[prev_class].map_column != column) {
+      classes_[prev_class].map.clear();
+      classes_[prev_class].map_column = column;
+    }
+
+    auto [itr, inserted] =
+        classes_[prev_class].map.emplace(value, free_classes_.back());
+
+    if (inserted) {
+      free_classes_.pop_back();
+    }
+
+    return itr->second;
+  }
+
+  size_t pop_free_class() {
+    if (free_classes_.empty()) {
+      extend_classes_storage(classes_.size() * 2);
+    }
+
+    size_t free_class = free_classes_.back();
+    free_classes_.pop_back();
+    return free_class;
+  }
+
+  std::vector<std::vector<size_t>> accumulate_counts() {
+    const size_t counts_size = (max_diff + 1) * (max_diff + 1);
+
+    for (size_t i = 1; i < classes_.size(); ++i) {
+      for (size_t j = 0; j < counts_size; ++j) {
+        classes_[i].counts[j] += classes_[i - 1].counts[j];
+      }
+    }
+
+    const size_t last_class = classes_.size() - 1;
+
+    std::vector<std::vector<size_t>> total(max_diff + 1);
+
+    for (size_t i = 0; i <= max_diff; ++i) {
+      total[i].resize(max_diff + 1, 0);
+
+      for (size_t j = 0; j <= max_diff; ++j) {
+        total[i][j] = get_rows_count(last_class, i, j);
+      }
+    }
+
+    return total;
+  }
+};
+
 // https://stackoverflow.com/questions/20511347/a-good-hash-function-for-a-vector/72073933
 class RowHasher {
   uint32_t hash_;
@@ -257,128 +374,81 @@ class Tables {
     }
   }
 
-  // TODO: cnt_0 and cnt_1 are small, maybe transform them into uint8_t
-  // or even merge into one uint8_t
-  // for every entry cnt_0 + cnt_1 <= max_diff
-  struct SmallRowEntry {
-    size_t cnt_0 = 0;
-    size_t cnt_1 = 0;
-
-    size_t class_id = 0;
-
-    double front = 0;
-  };
-
   void seek_small(const CSCMatrix<double>& matrix) {
     const auto [n, d] = matrix.shape();
     const size_t max_size = max_small_row_size + max_diff;
 
     size_t small_rows_cnt = 0;
+    for (size_t i = 0; i < n; ++i) {
+      if (transposed_[i].size() <= max_size) {
+        ++small_rows_cnt;
+      }
+    }
+
+    ClassesStorage classes(max_diff, small_rows_cnt);
+
+    size_t init_class = classes.pop_free_class();
+    classes.get_rows_count(init_class, 0, 0) = small_rows_cnt;
+
     std::vector<std::vector<SmallRowEntry>> rows(n);
     for (size_t i = 0; i < n; ++i) {
-      if (transposed_[i].size() > max_size) {
-        continue;
+      if (transposed_[i].size() <= max_size) {
+        rows[i].push_back(SmallRowEntry{
+            .cnt_0 = 0,
+            .cnt_1 = 0,
+            .class_id = init_class,
+            .front = 0,
+        });
       }
-
-      rows[i].push_back(SmallRowEntry{
-          .cnt_0 = 0,
-          .cnt_1 = 0,
-          .class_id = 0,
-          .front = 0,
-      });
-      ++small_rows_cnt;
     }
-
-    size_t class_cnt = 1;
-    std::unordered_map<std::pair<size_t, int64_t>, size_t> map;
-
-    // class_id -> (i, j) -> rows_count
-    std::unordered_map<size_t, std::vector<size_t>> rows_cnt;
-
-    {
-      std::vector<size_t> counts((max_diff + 1) * (max_diff + 1), 0);
-      counts[0] = small_rows_cnt;
-
-      rows_cnt.emplace(0, std::move(counts));
-    }
-
-    auto get_class = [&](size_t prev_class, int64_t norm_value) -> size_t {
-      const auto [itr, inserted] =
-          map.emplace(std::pair{prev_class, norm_value}, class_cnt);
-
-      if (inserted) {
-        // new class is created, insert entry in rows_cnt for it
-        std::vector<size_t> counts((max_diff + 1) * (max_diff + 1), 0);
-        rows_cnt.emplace(class_cnt, std::move(counts));
-
-        ++class_cnt;
-      }
-
-      return itr->second;
-    };
-
-    auto get_index = [&](size_t cnt_0, size_t cnt_1) -> size_t {
-      return cnt_0 * (max_diff + 1) + cnt_1;
-    };
 
     for (size_t col = 0; col < d; ++col) {
-      map.clear();
-
       for (auto [row, value] : matrix.get_column(col)) {
         if (transposed_[row].size() > max_size) {
           continue;
         }
 
         auto& entries = rows[row];
-        std::vector<SmallRowEntry> new_entries;
+        size_t entries_size = entries.size();
 
-        for (auto& entry : entries) {
-          --rows_cnt.at(entry.class_id)[get_index(entry.cnt_0, entry.cnt_1)];
+        for (size_t i = 0; i < entries_size; ++i) {
+          --classes.get_rows_count(entries[i]);
 
-          if (entry.cnt_0 + entry.cnt_1 < max_diff) {
+          if (entries[i].cnt_0 + entries[i].cnt_1 < max_diff) {
             // class 0 (create new entry)
             {
-              SmallRowEntry new_entry = entry;
+              SmallRowEntry new_entry = entries[i];
               ++new_entry.cnt_0;
 
-              new_entries.push_back(new_entry);
-
-              ++rows_cnt.at(
-                  entry.class_id)[get_index(new_entry.cnt_0, new_entry.cnt_1)];
+              entries.push_back(new_entry);
+              ++classes.get_rows_count(new_entry);
             }
 
             // class 1 (create new entry)
             {
-              SmallRowEntry new_entry = entry;
+              SmallRowEntry new_entry = entries[i];
               ++new_entry.cnt_1;
-              new_entry.class_id = get_class(entry.class_id, 0);
+              new_entry.class_id =
+                  classes.get_class(entries[i].class_id, 0, col);
 
-              new_entries.push_back(new_entry);
-
-              ++rows_cnt.at(new_entry.class_id)[get_index(new_entry.cnt_0,
-                                                          new_entry.cnt_1)];
+              entries.push_back(new_entry);
+              ++classes.get_rows_count(new_entry);
             }
           }
 
           // class 2 (update current entry)
           {
-            auto new_entry = entry;
-
-            if (new_entry.front == 0) {
-              new_entry.front = value;
+            if (entries[i].front == 0) {
+              entries[i].front = value;
             }
 
-            auto normalized = normalize_double(value / new_entry.front);
-            new_entry.class_id = get_class(new_entry.class_id, normalized);
+            auto normalized = normalize_double(value / entries[i].front);
+            entries[i].class_id =
+                classes.get_class(entries[i].class_id, normalized, col);
 
-            new_entries.push_back(new_entry);
-
-            ++rows_cnt.at(new_entry.class_id)[get_index(new_entry.cnt_0,
-                                                        new_entry.cnt_1)];
+            ++classes.get_rows_count(entries[i]);
           }
         }
-
-        entries = std::move(new_entries);
       }
 
       for (auto [row, value] : matrix.get_column(col)) {
@@ -392,9 +462,9 @@ class Tables {
         for (auto& entry : entries) {
           bool is_unique = true;
 
-          auto& counts = rows_cnt.at(entry.class_id);
           for (size_t i = 0; entry.cnt_0 + entry.cnt_1 + i <= max_diff; ++i) {
-            size_t count = counts[get_index(i, entry.cnt_1)];
+            const size_t count =
+                classes.get_rows_count(entry.class_id, i, entry.cnt_1);
 
             if ((i != entry.cnt_0 && count > 0) ||
                 (i == entry.cnt_0 && count > 1)) {
@@ -405,7 +475,8 @@ class Tables {
 
           if (is_unique) {
             // the row is removed
-            --counts[get_index(entry.cnt_0, entry.cnt_1)];
+            --classes.get_rows_count(entry);
+            classes.try_free_class(entry.class_id);
           } else {
             new_entries.push_back(entry);
           }
@@ -415,10 +486,16 @@ class Tables {
       }
     }
 
+    auto total = classes.accumulate_counts();
+
     std::vector<std::vector<std::vector<std::pair<size_t, size_t>>>> m(
         max_diff + 1);
     for (size_t i = 0; i <= max_diff; ++i) {
       m[i].resize(max_diff + 1);
+
+      for (size_t j = 0; j <= max_diff; ++j) {
+        m[i][j].resize(total[i][j]);
+      }
     }
 
     for (size_t row = 0; row < n; ++row) {
@@ -427,13 +504,8 @@ class Tables {
       }
 
       for (const auto entry : rows[row]) {
-        m[entry.cnt_0][entry.cnt_1].emplace_back(entry.class_id, row);
-      }
-    }
-
-    for (size_t i = 0; i <= max_diff; ++i) {
-      for (size_t j = 0; j <= max_diff; ++j) {
-        std::ranges::sort(m[i][j], {}, [](auto p) { return p.first; });
+        m[entry.cnt_0][entry.cnt_1][--classes.get_rows_count(entry)] = {
+            entry.class_id, row};
       }
     }
 
