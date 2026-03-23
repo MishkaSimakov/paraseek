@@ -8,47 +8,21 @@
 #include <unordered_set>
 #include <vector>
 
-#include "../utils/Hamming.h"
-#include "../utils/ZipRows.h"
+#include "Result.h"
 #include "matrix/CSCMatrix.h"
 #include "seekers/Statistics.h"
+#include "utils/Hamming.h"
 #include "utils/Hashers.h"
 #include "utils/Logging.h"
 
 namespace seekers {
 
-std::vector<std::pair<size_t, size_t>> normalize_tables_result(
-    const std::vector<std::pair<size_t, size_t>>& singular,
-    const std::vector<std::pair<std::vector<size_t>, std::vector<size_t>>>&
-        bipartite) {
-  std::unordered_set<std::pair<size_t, size_t>> result;
-
-  for (auto [i, j] : singular) {
-    if (i > j) {
-      result.emplace(j, i);
-    } else {
-      result.emplace(i, j);
-    }
-  }
-
-  for (const auto& [left, right] : bipartite) {
-    for (size_t i : left) {
-      for (size_t j : right) {
-        if (i == j) {
-          continue;
-        }
-
-        if (i > j) {
-          result.emplace(j, i);
-        } else {
-          result.emplace(i, j);
-        }
-      }
-    }
-  }
-
-  return {result.begin(), result.end()};
-}
+/*
+ * If you can look into the seeds of time
+ * And say which grain will grow and which will not,
+ * Speak, then, to me, who neither beg nor fear
+ * Your favors nor your hate.
+ */
 
 // https://stackoverflow.com/questions/20511347/a-good-hash-function-for-a-vector/72073933
 class RowHasher {
@@ -291,7 +265,6 @@ class Tables {
     size_t cnt_1 = 0;
 
     size_t class_id = 0;
-    bool* is_unique = nullptr;
 
     double front = 0;
   };
@@ -317,7 +290,7 @@ class Tables {
     }
 
     size_t class_cnt = 1;
-    std::unordered_map<std::pair<size_t, int64_t>, std::pair<size_t, bool>> map;
+    std::unordered_map<std::pair<size_t, int64_t>, size_t> map;
 
     // class_id -> (i, j) -> rows_count
     std::unordered_map<size_t, std::vector<size_t>> rows_cnt;
@@ -329,10 +302,9 @@ class Tables {
       rows_cnt.emplace(0, std::move(counts));
     }
 
-    auto get_class = [&](size_t prev_class,
-                         int64_t norm_value) -> std::pair<size_t, bool>& {
-      const auto [itr, inserted] = map.emplace(
-          std::pair{prev_class, norm_value}, std::pair{class_cnt, true});
+    auto get_class = [&](size_t prev_class, int64_t norm_value) -> size_t {
+      const auto [itr, inserted] =
+          map.emplace(std::pair{prev_class, norm_value}, class_cnt);
 
       if (inserted) {
         // new class is created, insert entry in rows_cnt for it
@@ -340,8 +312,6 @@ class Tables {
         rows_cnt.emplace(class_cnt, std::move(counts));
 
         ++class_cnt;
-      } else {
-        itr->second.second = false;
       }
 
       return itr->second;
@@ -370,7 +340,6 @@ class Tables {
             {
               SmallRowEntry new_entry = entry;
               ++new_entry.cnt_0;
-              new_entry.is_unique = nullptr;
 
               new_entries.push_back(new_entry);
 
@@ -382,10 +351,7 @@ class Tables {
             {
               SmallRowEntry new_entry = entry;
               ++new_entry.cnt_1;
-
-              auto& new_class = get_class(entry.class_id, 0);
-              new_entry.class_id = new_class.first;
-              new_entry.is_unique = &new_class.second;
+              new_entry.class_id = get_class(entry.class_id, 0);
 
               new_entries.push_back(new_entry);
 
@@ -403,9 +369,7 @@ class Tables {
             }
 
             auto normalized = normalize_double(value / new_entry.front);
-            auto& new_class = get_class(new_entry.class_id, normalized);
-            new_entry.class_id = new_class.first;
-            new_entry.is_unique = &new_class.second;
+            new_entry.class_id = get_class(new_entry.class_id, normalized);
 
             new_entries.push_back(new_entry);
 
@@ -430,7 +394,10 @@ class Tables {
 
           auto& counts = rows_cnt.at(entry.class_id);
           for (size_t i = 0; entry.cnt_0 + entry.cnt_1 + i <= max_diff; ++i) {
-            if (counts[get_index(i, entry.cnt_1)] != 0) {
+            size_t count = counts[get_index(i, entry.cnt_1)];
+
+            if ((i != entry.cnt_0 && count > 0) ||
+                (i == entry.cnt_0 && count > 1)) {
               is_unique = false;
               break;
             }
@@ -447,21 +414,6 @@ class Tables {
         entries = std::move(new_entries);
       }
     }
-
-    // std::vector<size_t> entries_sizes;
-    // for (auto& entries : rows) {
-    // entries_sizes.push_back(entries.size());
-    // }
-
-    size_t total_entries_count = 0;
-    for (auto& entries : rows) {
-      total_entries_count += entries.size();
-    }
-    logging::log_value(total_entries_count, "entries_count.csv");
-    // std::ranges::sort(entries_sizes);
-    // for (size_t i = 0; i < 10; ++i) {
-    //   std::println("    {}", entries_sizes[entries_sizes.size() - i - 1]);
-    // }
 
     std::vector<std::vector<std::vector<std::pair<size_t, size_t>>>> m(
         max_diff + 1);
@@ -513,7 +465,7 @@ class Tables {
       : Tables(max_diff, {.groups_count = max_diff * 2,
                           .max_small_row_size = max_diff * 2}) {}
 
-  auto seek(const CSCMatrix<double>& matrix) {
+  Result seek(const CSCMatrix<double>& matrix) {
     const size_t selected_groups_count = groups_count - max_diff;
 
     auto [n, d] = matrix.shape();
@@ -549,7 +501,10 @@ class Tables {
 
     std::println("  finished small rows");
 
-    return std::pair{std::move(unique), std::move(result_bipartite_)};
+    return Result{
+        .singular = std::move(unique),
+        .bipartite = std::move(result_bipartite_),
+    };
   }
 
   Statistics get_stats() const { return statistics_; }

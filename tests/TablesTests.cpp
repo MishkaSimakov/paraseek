@@ -1,10 +1,12 @@
 #include <gtest/gtest.h>
 
 #include <random>
+#include <unordered_set>
 
 #include "problems/ProblemMatrix.h"
 #include "problems/ProblemsNames.h"
 #include "seekers/BruteForce.h"
+#include "seekers/Result.h"
 #include "seekers/Tables.h"
 #include "utils/Printing.h"
 
@@ -15,20 +17,44 @@ TEST(TablesTests, CompareWithBruteForce) {
     auto bf_result = seekers::BruteForce(2).seek(matrix);
     auto tbls_result = seekers::Tables(2).seek(matrix);
 
-    auto tbls_normalized =
-        seekers::normalize_tables_result(tbls_result.first, tbls_result.second);
-    std::unordered_set tbls_normalized_set(tbls_normalized.begin(),
-                                           tbls_normalized.end());
+    auto tbls_normalized = seekers::normalize_result(tbls_result).as_set();
 
     for (auto p : bf_result) {
-      auto itr = tbls_normalized_set.find(p);
+      auto itr = tbls_normalized.find(p);
 
-      ASSERT_FALSE(itr == tbls_normalized_set.end())
+      ASSERT_FALSE(itr == tbls_normalized.end())
           << std::format("failed for problem: {}", problems_names[i]);
-      tbls_normalized_set.erase(itr);
+      tbls_normalized.erase(itr);
     }
 
-    ASSERT_TRUE(tbls_normalized_set.empty())
+    ASSERT_TRUE(tbls_normalized.empty())
+        << std::format("failed for problem: {}", problems_names[i]);
+  }
+}
+
+TEST(TablesTests, CompareWithBruteForceAllRowsSmall) {
+  for (size_t i = 0; i < 100 && i < problems_names.size(); ++i) {
+    auto matrix = get_problem_matrix(problems_names[i]);
+
+    auto bf_result = seekers::BruteForce(2).seek(matrix);
+
+    seekers::TablesParameters params{
+        .groups_count = 4,
+        .max_small_row_size = matrix.shape().second,
+    };
+    auto tbls_result = seekers::Tables(2, params).seek(matrix);
+
+    auto tbls_normalized = seekers::normalize_result(tbls_result).as_set();
+
+    for (auto p : bf_result) {
+      auto itr = tbls_normalized.find(p);
+
+      ASSERT_FALSE(itr == tbls_normalized.end())
+          << std::format("failed for problem: {}", problems_names[i]);
+      tbls_normalized.erase(itr);
+    }
+
+    ASSERT_TRUE(tbls_normalized.empty())
         << std::format("failed for problem: {}", problems_names[i]);
   }
 }
@@ -45,11 +71,10 @@ TEST(TablesTests, SmallTest1) {
   };
 
   auto result = seekers::Tables(2, params).seek(matrix);
-  auto normalized =
-      seekers::normalize_tables_result(result.first, result.second);
+  auto normalized = seekers::normalize_result(result);
 
-  ASSERT_EQ(normalized.size(), 1);
-  ASSERT_EQ(normalized[0], (std::pair{0, 1}));
+  ASSERT_EQ(normalized.singular.size(), 1);
+  ASSERT_EQ(normalized.singular[0], (std::pair{0, 1}));
 }
 
 TEST(TablesTests, SmallTest2) {
@@ -59,10 +84,9 @@ TEST(TablesTests, SmallTest2) {
   };
 
   auto result = seekers::Tables(2).seek(matrix);
-  auto normalized =
-      seekers::normalize_tables_result(result.first, result.second);
+  auto normalized = seekers::normalize_result(result);
 
-  ASSERT_EQ(normalized.size(), 0);
+  ASSERT_EQ(normalized.singular.size(), 0);
 }
 
 TEST(TablesTests, RandomizedSmallTest) {
@@ -87,14 +111,13 @@ TEST(TablesTests, RandomizedSmallTest) {
     };
 
     auto result = seekers::Tables(2, params).seek(matrix);
-    auto normalized =
-        seekers::normalize_tables_result(result.first, result.second);
+    auto normalized = seekers::normalize_result(result);
 
     if (similarity::hamming(matrix.get_row(0), matrix.get_row(1)) <= 2) {
-      ASSERT_EQ(normalized.size(), 1);
-      ASSERT_EQ(normalized[0], (std::pair{0, 1}));
+      ASSERT_EQ(normalized.singular.size(), 1);
+      ASSERT_EQ(normalized.singular[0], (std::pair{0, 1}));
     } else {
-      ASSERT_EQ(normalized.size(), 0);
+      ASSERT_EQ(normalized.singular.size(), 0);
     }
   }
 }

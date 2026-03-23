@@ -1,6 +1,7 @@
 #include <chrono>
 #include <print>
 
+#include "matrix/NPY.h"
 #include "problems/ProblemMatrix.h"
 #include "problems/ProblemsNames.h"
 #include "seekers/BruteForce.h"
@@ -8,7 +9,7 @@
 #include "utils/Printing.h"
 
 int main() {
-  const auto problem_name = "pk1";
+  const auto problem_name = "lectsched-5-obj";
   std::println("{}", problem_name);
 
   auto matrix = get_problem_matrix(problem_name);

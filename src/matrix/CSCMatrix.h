@@ -174,3 +174,21 @@ std::ostream& operator<<(std::ostream& os, const CSCMatrix<Field>& matrix) {
 
   return os;
 }
+
+namespace linalg {
+
+template <typename Field>
+Matrix<Field> to_dense(const CSCMatrix<Field>& sparse) {
+  auto [n, m] = sparse.shape();
+  Matrix<Field> result(n, m);
+
+  for (size_t col = 0; col < m; ++col) {
+    for (const auto& [row, value] : sparse.get_column(col)) {
+      result[row, col] = value;
+    }
+  }
+
+  return result;
+}
+
+}  // namespace linalg

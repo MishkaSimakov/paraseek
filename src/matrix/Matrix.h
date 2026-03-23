@@ -5,8 +5,8 @@
 #include <sstream>
 #include <vector>
 
-#include "Types.h"
 #include "FieldTraits.h"
+#include "Types.h"
 
 template <typename Field>
 class MatrixSlice {
@@ -177,7 +177,7 @@ class MatrixSlice {
   }
 
   MatrixSlice& operator/=(const Field& value)
-  requires(!std::is_const_v<Field>)
+    requires(!std::is_const_v<Field>)
   {
     auto [n, d] = shape();
 
@@ -517,17 +517,6 @@ std::ostream& operator<<(std::ostream& os, MatrixLike auto&& matrix) {
 }
 
 namespace linalg {
-void to_numpy(std::ostream& os, MatrixLike auto&& matrix) {
-  auto [n, m] = matrix.shape();
-
-  for (size_t i = 0; i < n; ++i) {
-    for (size_t j = 0; j < m; ++j) {
-      os << matrix[i, j] << " ";
-    }
-
-    os << "\n";
-  }
-}
 
 template <MatrixLike Head, MatrixLike... Tail>
 Matrix<common_field_t<Head, Tail...>> vstack(Head&& topmost, Tail&&... rest) {
