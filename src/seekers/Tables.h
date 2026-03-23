@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <numeric>
+#include <set>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -12,10 +13,11 @@
 #include "matrix/CSCMatrix.h"
 #include "seekers/Statistics.h"
 #include "utils/Hashers.h"
+#include "utils/Logging.h"
 
 namespace seekers {
 
-std::unordered_set<std::pair<size_t, size_t>> normalize_tables_result(
+std::vector<std::pair<size_t, size_t>> normalize_tables_result(
     const std::vector<std::pair<size_t, size_t>>& singular,
     const std::vector<std::pair<std::vector<size_t>, std::vector<size_t>>>&
         bipartite) {
@@ -45,7 +47,7 @@ std::unordered_set<std::pair<size_t, size_t>> normalize_tables_result(
     }
   }
 
-  return result;
+  return {result.begin(), result.end()};
 }
 
 // https://stackoverflow.com/questions/20511347/a-good-hash-function-for-a-vector/72073933
@@ -168,8 +170,7 @@ class Tables {
 
   void seek_table(const CSCMatrix<double>& matrix,
                   const std::vector<bool>& groups_mask,
-                  const std::vector<std::vector<Block>>& blocks,
-                  const std::vector<std::vector<size_t>>& groups) {
+                  const std::vector<std::vector<Block>>& blocks) {
     auto [n, d] = matrix.shape();
 
     std::vector<size_t> merged_classes(n);
@@ -178,25 +179,23 @@ class Tables {
 
     for (size_t i = 0; i < n; ++i) {
       if (transposed_[i].size() <= max_small_row_size) {
-        // small rows are processed separately
-        merged_classes[i] = 0;
-      } else {
-        // TODO: correct seed? RowHasher?
-        StreamHasher hasher;
+        continue;
+      }
 
-        for (size_t group_id = 0; group_id < groups_mask.size(); ++group_id) {
-          if (groups_mask[group_id]) {
-            if (front[i] == 0) {
-              front[i] = blocks[i][group_id].front;
-            }
+      // TODO: correct seed? RowHasher?
+      StreamHasher hasher;
 
-            hasher << blocks[i][group_id].class_id;
+      for (size_t group_id = 0; group_id < groups_mask.size(); ++group_id) {
+        if (groups_mask[group_id]) {
+          if (front[i] == 0) {
+            front[i] = blocks[i][group_id].front;
           }
 
-          merged_classes[i] = hasher.get_hash();
+          hasher << blocks[i][group_id].class_id;
         }
       }
 
+      merged_classes[i] = hasher.get_hash();
       ++classes_sizes[merged_classes[i]];
     }
 
@@ -206,18 +205,21 @@ class Tables {
       prev = value;
     }
 
-    std::vector<size_t> indices(n);
+    // total count of big rows is stored in prev after previous loop
+    std::vector<size_t> indices(prev);
     for (size_t i = 0; i < n; ++i) {
-      indices[--classes_sizes[merged_classes[i]]] = i;
+      if (transposed_[i].size() > max_small_row_size) {
+        indices[--classes_sizes[merged_classes[i]]] = i;
+      }
     }
 
-    for (size_t i = 0; i < n; ++i) {
-      if (merged_classes[indices[i]] == 0) {
+    for (size_t i = 0; i < prev; ++i) {
+      if (transposed_[indices[i]].size() <= max_small_row_size) {
         continue;
       }
 
       for (size_t j = i + 1;
-           j < n && merged_classes[indices[j]] == merged_classes[indices[i]];
+           j < prev && merged_classes[indices[j]] == merged_classes[indices[i]];
            ++j) {
         consider_pair(indices[i], indices[j], front);
       }
@@ -289,6 +291,7 @@ class Tables {
     size_t cnt_1 = 0;
 
     size_t class_id = 0;
+    bool* is_unique = nullptr;
 
     double front = 0;
   };
@@ -297,28 +300,55 @@ class Tables {
     const auto [n, d] = matrix.shape();
     const size_t max_size = max_small_row_size + max_diff;
 
+    size_t small_rows_cnt = 0;
     std::vector<std::vector<SmallRowEntry>> rows(n);
     for (size_t i = 0; i < n; ++i) {
+      if (transposed_[i].size() > max_size) {
+        continue;
+      }
+
       rows[i].push_back(SmallRowEntry{
           .cnt_0 = 0,
           .cnt_1 = 0,
           .class_id = 0,
           .front = 0,
       });
+      ++small_rows_cnt;
     }
 
     size_t class_cnt = 1;
-    std::unordered_map<std::pair<size_t, int64_t>, size_t> map;
+    std::unordered_map<std::pair<size_t, int64_t>, std::pair<size_t, bool>> map;
 
-    auto get_class = [&](size_t prev_class, int64_t norm_value) {
-      const auto [itr, inserted] =
-          map.emplace(std::pair{prev_class, norm_value}, class_cnt);
+    // class_id -> (i, j) -> rows_count
+    std::unordered_map<size_t, std::vector<size_t>> rows_cnt;
+
+    {
+      std::vector<size_t> counts((max_diff + 1) * (max_diff + 1), 0);
+      counts[0] = small_rows_cnt;
+
+      rows_cnt.emplace(0, std::move(counts));
+    }
+
+    auto get_class = [&](size_t prev_class,
+                         int64_t norm_value) -> std::pair<size_t, bool>& {
+      const auto [itr, inserted] = map.emplace(
+          std::pair{prev_class, norm_value}, std::pair{class_cnt, true});
 
       if (inserted) {
+        // new class is created, insert entry in rows_cnt for it
+        std::vector<size_t> counts((max_diff + 1) * (max_diff + 1), 0);
+        rows_cnt.emplace(class_cnt, std::move(counts));
+
         ++class_cnt;
+      } else {
+        itr->second.second = false;
       }
 
       return itr->second;
+    };
+
+    auto get_index = [&](size_t cnt_0, size_t cnt_1) -> size_t {
+      return cnt_0 * (max_diff + 1) + cnt_1;
     };
 
     for (size_t col = 0; col < d; ++col) {
@@ -333,37 +363,105 @@ class Tables {
         std::vector<SmallRowEntry> new_entries;
 
         for (auto& entry : entries) {
+          --rows_cnt.at(entry.class_id)[get_index(entry.cnt_0, entry.cnt_1)];
+
           if (entry.cnt_0 + entry.cnt_1 < max_diff) {
             // class 0 (create new entry)
             {
               SmallRowEntry new_entry = entry;
               ++new_entry.cnt_0;
+              new_entry.is_unique = nullptr;
 
               new_entries.push_back(new_entry);
+
+              ++rows_cnt.at(
+                  entry.class_id)[get_index(new_entry.cnt_0, new_entry.cnt_1)];
             }
 
             // class 1 (create new entry)
             {
               SmallRowEntry new_entry = entry;
               ++new_entry.cnt_1;
-              new_entry.class_id = get_class(entry.class_id, 1);
+
+              auto& new_class = get_class(entry.class_id, 0);
+              new_entry.class_id = new_class.first;
+              new_entry.is_unique = &new_class.second;
 
               new_entries.push_back(new_entry);
+
+              ++rows_cnt.at(new_entry.class_id)[get_index(new_entry.cnt_0,
+                                                          new_entry.cnt_1)];
             }
           }
 
           // class 2 (update current entry)
-          if (entry.front == 0) {
-            entry.front = value;
-          }
+          {
+            auto new_entry = entry;
 
-          auto normalized = normalize_double(value / entry.front);
-          entry.class_id = get_class(entry.class_id, normalized);
+            if (new_entry.front == 0) {
+              new_entry.front = value;
+            }
+
+            auto normalized = normalize_double(value / new_entry.front);
+            auto& new_class = get_class(new_entry.class_id, normalized);
+            new_entry.class_id = new_class.first;
+            new_entry.is_unique = &new_class.second;
+
+            new_entries.push_back(new_entry);
+
+            ++rows_cnt.at(new_entry.class_id)[get_index(new_entry.cnt_0,
+                                                        new_entry.cnt_1)];
+          }
         }
 
-        entries.append_range(new_entries);
+        entries = std::move(new_entries);
+      }
+
+      for (auto [row, value] : matrix.get_column(col)) {
+        if (transposed_[row].size() > max_size) {
+          continue;
+        }
+
+        auto& entries = rows[row];
+        std::vector<SmallRowEntry> new_entries;
+
+        for (auto& entry : entries) {
+          bool is_unique = true;
+
+          auto& counts = rows_cnt.at(entry.class_id);
+          for (size_t i = 0; entry.cnt_0 + entry.cnt_1 + i <= max_diff; ++i) {
+            if (counts[get_index(i, entry.cnt_1)] != 0) {
+              is_unique = false;
+              break;
+            }
+          }
+
+          if (is_unique) {
+            // the row is removed
+            --counts[get_index(entry.cnt_0, entry.cnt_1)];
+          } else {
+            new_entries.push_back(entry);
+          }
+        }
+
+        entries = std::move(new_entries);
       }
     }
+
+    // std::vector<size_t> entries_sizes;
+    // for (auto& entries : rows) {
+    // entries_sizes.push_back(entries.size());
+    // }
+
+    size_t total_entries_count = 0;
+    for (auto& entries : rows) {
+      total_entries_count += entries.size();
+    }
+    logging::log_value(total_entries_count, "entries_count.csv");
+    // std::ranges::sort(entries_sizes);
+    // for (size_t i = 0; i < 10; ++i) {
+    //   std::println("    {}", entries_sizes[entries_sizes.size() - i - 1]);
+    // }
 
     std::vector<std::vector<std::vector<std::pair<size_t, size_t>>>> m(
         max_diff + 1);
@@ -397,24 +495,23 @@ class Tables {
   }
 
  public:
-  explicit Tables(size_t max_diff)
-      : max_diff(max_diff),
-        groups_count(max_diff * 2),
-        max_small_row_size(max_diff * 2) {
-    if (max_diff != 2) {
-      throw std::runtime_error("Not implemented");
-    }
-  }
-
-  // max_diff = 2
   explicit Tables(size_t max_diff, TablesParameters params)
       : max_diff(max_diff),
         groups_count(params.groups_count),
         max_small_row_size(params.max_small_row_size) {
     if (max_diff != 2) {
-      throw std::runtime_error("Not implemented");
+      throw std::invalid_argument("Not implemented");
+    }
+
+    if (params.max_small_row_size < max_diff * 2) {
+      throw std::invalid_argument(
+          "max_small_row_size must be at least max_diff * 2");
     }
   }
+
+  explicit Tables(size_t max_diff)
+      : Tables(max_diff, {.groups_count = max_diff * 2,
+                          .max_small_row_size = max_diff * 2}) {}
 
   auto seek(const CSCMatrix<double>& matrix) {
     const size_t selected_groups_count = groups_count - max_diff;
@@ -436,8 +533,10 @@ class Tables {
     std::fill_n(mask.begin(), selected_groups_count, true);
 
     do {
-      seek_table(matrix, mask, blocks, groups);
+      seek_table(matrix, mask, blocks);
     } while (std::ranges::prev_permutation(mask).found);
+
+    std::println("  finished big rows");
 
     // remove duplicates from the singular part of the result
     std::ranges::sort(result_singular_);
@@ -447,6 +546,8 @@ class Tables {
 
     // process all small rows
     seek_small(matrix);
+
+    std::println("  finished small rows");
 
     return std::pair{std::move(unique), std::move(result_bipartite_)};
   }
