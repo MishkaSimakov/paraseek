@@ -9,7 +9,7 @@
 
 int main() {
   std::ofstream os("output.csv");
-  std::println(os, "problem_name,time");
+  std::println(os, "problem_name,time,small_rows_time,big_rows_time");
 
   for (size_t i = 0; i < problems_names.size(); ++i) {
     const auto problem_name = problems_names[i];
@@ -21,17 +21,18 @@ int main() {
 
     seekers::TablesParameters params{
         .groups_count = 4,
-        .max_small_row_size = 10,
+        .max_small_row_size = 8,
     };
 
-    auto start = std::chrono::steady_clock::now();
-    auto [singular, bipartite] = seekers::Tables(2, params).seek(matrix);
-    auto end = std::chrono::steady_clock::now();
+    auto seeker = seekers::Tables(2, params);
+    seekers::Result result;
 
-    std::println(os, "{},{}", problem_name, (end - start).count());
+    auto duration = timing::timeit([&] { result = seeker.seek(matrix); });
 
-    std::println("  singular part: {}", singular.size());
-    std::println("  bipartite part: {}", bipartite.size());
-    std::println("  duration: {}", end - start);
+    auto stats = seeker.get_stats();
+
+    std::println(os, "{},{},{},{}", problem_name, duration.count(),
+                 stats.small_rows_duration.count(),
+                 stats.big_rows_duration.count());
   }
 }

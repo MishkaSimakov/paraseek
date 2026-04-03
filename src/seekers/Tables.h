@@ -14,6 +14,7 @@
 #include "utils/Hamming.h"
 #include "utils/Hashers.h"
 #include "utils/Logging.h"
+#include "utils/Printing.h"
 
 namespace seekers {
 
@@ -182,6 +183,8 @@ class Tables {
 
   std::vector<SparseVector<double>> transposed_;
 
+  size_t total_considered_big_{0};
+
   std::vector<std::pair<size_t, size_t>> result_singular_;
   std::vector<std::pair<std::vector<size_t>, std::vector<size_t>>>
       result_bipartite_;
@@ -312,6 +315,7 @@ class Tables {
       for (size_t j = i + 1;
            j < prev && merged_classes[indices[j]] == merged_classes[indices[i]];
            ++j) {
+        ++total_considered_big_;
         consider_pair(indices[i], indices[j], front);
       }
     }
@@ -484,6 +488,15 @@ class Tables {
 
         entries = std::move(new_entries);
       }
+
+      // std::unordered_set<size_t> current_classes;
+      // for (const auto& row : rows) {
+      //   for (const auto& entry : row) {
+      //     current_classes.insert(entry.class_id);
+      //   }
+      // }
+      //
+      // logging::log_value(current_classes.size(), "classes_cnt.csv");
     }
 
     auto total = classes.accumulate_counts();
@@ -551,16 +564,56 @@ class Tables {
       groups[std::hash<size_t>()(col) % groups_count].push_back(col);
     }
 
+    // greedy algorithm
+    // std::vector<std::vector<bool>> groups_zero_rows_mask(n);
+    // for (size_t row = 0; row < n; ++row) {
+    //   groups_zero_rows_mask[row].resize(groups_count, false);
+    // }
+    //
+    // for (size_t col = 0; col < d; ++col) {
+    //   std::vector<size_t> increment_per_group(groups_count, 0);
+    //
+    //   for (const auto [row, value] : matrix.get_column(col)) {
+    //     if (transposed_[row].size() <= max_small_row_size) {
+    //       continue;
+    //     }
+    //
+    //     for (size_t i = 0; i < groups_count; ++i) {
+    //       if (!groups_zero_rows_mask[row][i]) {
+    //         ++increment_per_group[i];
+    //       }
+    //     }
+    //   }
+    //
+    //   size_t max_increment_group = 0;
+    //   for (size_t i = 0; i < groups_count; ++i) {
+    //     if (increment_per_group[i] >
+    //     increment_per_group[max_increment_group]) {
+    //       max_increment_group = i;
+    //     }
+    //   }
+    //
+    //   groups[max_increment_group].push_back(col);
+    //
+    //   for (const auto [row, value] : matrix.get_column(col)) {
+    //     if (transposed_[row].size() <= max_small_row_size) {
+    //       continue;
+    //     }
+    //
+    //     groups_zero_rows_mask[row][max_increment_group] = true;
+    //   }
+    // }
+
     auto blocks = get_blocks(matrix, groups);
 
     std::vector<bool> mask(groups_count, false);
     std::fill_n(mask.begin(), selected_groups_count, true);
 
-    do {
-      seek_table(matrix, mask, blocks);
-    } while (std::ranges::prev_permutation(mask).found);
-
-    std::println("  finished big rows");
+    statistics_.big_rows_duration = timing::timeit([&] {
+      do {
+        seek_table(matrix, mask, blocks);
+      } while (std::ranges::prev_permutation(mask).found);
+    });
 
     // remove duplicates from the singular part of the result
     std::ranges::sort(result_singular_);
@@ -569,9 +622,8 @@ class Tables {
     std::ranges::unique_copy(result_singular_, std::back_inserter(unique));
 
     // process all small rows
-    seek_small(matrix);
-
-    std::println("  finished small rows");
+    statistics_.small_rows_duration =
+        timing::timeit([&] { seek_small(matrix); });
 
     return Result{
         .singular = std::move(unique),

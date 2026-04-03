@@ -17,14 +17,17 @@ int main() {
 
   seekers::TablesParameters params{
       .groups_count = 4,
-      .max_small_row_size = 4,
+      .max_small_row_size = 8,
   };
 
   auto start = std::chrono::steady_clock::now();
-  auto [singular, bipartite] = seekers::Tables(2, params).seek(matrix);
+  auto result = seekers::Tables(2, params).seek(matrix);
   auto end = std::chrono::steady_clock::now();
 
-  std::println("  singular part: {}", singular.size());
-  std::println("  bipartite part: {}", bipartite.size());
+  std::println("  singular part: {}", result.singular.size());
+  std::println("  bipartite part: {}", result.bipartite.size());
   std::println("  duration: {}", end - start);
+
+  auto normalized = seekers::normalize_result(result);
+  std::println("  normalized: {}", normalized.singular.size());
 }

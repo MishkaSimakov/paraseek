@@ -32,6 +32,16 @@ class MPSReader {
 
   enum class RowType { LESS_THAN, GREATER_THAN, EQUAL, OBJECTIVE };
 
+  struct Row {
+    size_t index;
+    RowType type;
+    std::vector<std::pair<std::string, Field>> variables;
+    Field rhs{0};
+    std::optional<Field> range = std::nullopt;
+
+    explicit Row(RowType type) : type(type) {}
+  };
+
   MPSFieldsMode mode_;
   std::unordered_map<std::string, Column> columns_;
   std::unordered_map<std::string, size_t> rows_enumeration_;
