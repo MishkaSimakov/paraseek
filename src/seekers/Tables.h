@@ -32,6 +32,7 @@ struct SmallRowEntry {
   size_t cnt_0 = 0;
   size_t cnt_1 = 0;
 
+  size_t remaining_length = 0;
   size_t class_id = 0;
 
   double front = 0;
@@ -41,7 +42,9 @@ class ClassesStorage {
   struct ClassInfo {
     size_t map_column{0};
     std::unordered_map<int64_t, size_t> map;
-    std::vector<size_t> counts;
+
+    // count 0, count 1, remaining length
+    std::unordered_map<std::tuple<size_t, size_t, size_t>, size_t> counts;
   };
 
   std::vector<size_t> free_classes_;
@@ -54,28 +57,29 @@ class ClassesStorage {
     classes_.resize(new_size);
 
     for (size_t i = old_size; i < new_size; ++i) {
-      classes_[i].counts.resize((max_diff + 1) * (max_diff + 1), 0);
       free_classes_.push_back(i);
     }
   }
 
  public:
-  ClassesStorage(size_t max_diff, size_t rows_count) : max_diff(max_diff) {
-    extend_classes_storage(std::max(rows_count, 64uz));
+  explicit ClassesStorage(size_t max_diff) : max_diff(max_diff) {
+    extend_classes_storage(64uz);
   }
 
-  size_t& get_rows_count(size_t class_id, size_t cnt_0, size_t cnt_1) {
-    return classes_[class_id].counts[cnt_0 * (max_diff + 1) + cnt_1];
+  size_t& get_rows_count(size_t class_id, size_t cnt_0, size_t cnt_1,
+                         size_t remaining_length) {
+    return classes_[class_id].counts[{cnt_0, cnt_1, remaining_length}];
   }
 
   size_t& get_rows_count(const SmallRowEntry entry) {
-    return get_rows_count(entry.class_id, entry.cnt_0, entry.cnt_1);
+    return get_rows_count(entry.class_id, entry.cnt_0, entry.cnt_1,
+                          entry.remaining_length);
   }
 
   void try_free_class(size_t class_id) {
     bool is_zero = true;
 
-    for (const size_t count : classes_[class_id].counts) {
+    for (const size_t count : classes_[class_id].counts | std::views::values) {
       if (count != 0) {
         is_zero = false;
         break;
@@ -117,28 +121,25 @@ class ClassesStorage {
     return free_class;
   }
 
-  std::vector<std::vector<size_t>> accumulate_counts() {
+  auto accumulate_counts() {
     const size_t counts_size = (max_diff + 1) * (max_diff + 1);
 
-    for (size_t i = 1; i < classes_.size(); ++i) {
-      for (size_t j = 0; j < counts_size; ++j) {
-        classes_[i].counts[j] += classes_[i - 1].counts[j];
+    std::vector<std::vector<size_t>> prefix_sums(classes_.size());
+
+    for (size_t i = 0; i < classes_.size(); ++i) {
+      prefix_sums[i].resize(counts_size, 0);
+      for (auto [c, v] : classes_[i].counts) {
+        prefix_sums[i][std::get<0>(c) * (max_diff + 1) + std::get<1>(c)] += v;
+      }
+
+      if (i > 0) {
+        for (size_t j = 0; j < counts_size; ++j) {
+          prefix_sums[i][j] += prefix_sums[i - 1][j];
+        }
       }
     }
 
-    const size_t last_class = classes_.size() - 1;
-
-    std::vector<std::vector<size_t>> total(max_diff + 1);
-
-    for (size_t i = 0; i <= max_diff; ++i) {
-      total[i].resize(max_diff + 1, 0);
-
-      for (size_t j = 0; j <= max_diff; ++j) {
-        total[i][j] = get_rows_count(last_class, i, j);
-      }
-    }
-
-    return total;
+    return prefix_sums;
   }
 };
 
@@ -382,17 +383,14 @@ class Tables {
     const auto [n, d] = matrix.shape();
     const size_t max_size = max_small_row_size + max_diff;
 
-    size_t small_rows_cnt = 0;
+    ClassesStorage classes(max_diff);
+    const size_t init_class = classes.pop_free_class();
+
     for (size_t i = 0; i < n; ++i) {
       if (transposed_[i].size() <= max_size) {
-        ++small_rows_cnt;
+        ++classes.get_rows_count(init_class, 0, 0, transposed_[i].size());
       }
     }
-
-    ClassesStorage classes(max_diff, small_rows_cnt);
-
-    size_t init_class = classes.pop_free_class();
-    classes.get_rows_count(init_class, 0, 0) = small_rows_cnt;
 
     std::vector<std::vector<SmallRowEntry>> rows(n);
     for (size_t i = 0; i < n; ++i) {
@@ -401,6 +399,7 @@ class Tables {
             .cnt_0 = 0,
             .cnt_1 = 0,
             .class_id = init_class,
+            .remaining_length = transposed_[i].size(),
             .front = 0,
         });
       }
@@ -423,6 +422,7 @@ class Tables {
             {
               SmallRowEntry new_entry = entries[i];
               ++new_entry.cnt_0;
+              --new_entry.remaining_length;
 
               entries.push_back(new_entry);
               ++classes.get_rows_count(new_entry);
@@ -432,6 +432,7 @@ class Tables {
             {
               SmallRowEntry new_entry = entries[i];
               ++new_entry.cnt_1;
+              --new_entry.remaining_length;
               new_entry.class_id =
                   classes.get_class(entries[i].class_id, 0, col);
 
@@ -445,6 +446,8 @@ class Tables {
             if (entries[i].front == 0) {
               entries[i].front = value;
             }
+
+            --entries[i].remaining_length;
 
             auto normalized = normalize_double(value / entries[i].front);
             entries[i].class_id =
@@ -466,14 +469,33 @@ class Tables {
         for (auto& entry : entries) {
           bool is_unique = true;
 
-          for (size_t i = 0; entry.cnt_0 + entry.cnt_1 + i <= max_diff; ++i) {
-            const size_t count =
-                classes.get_rows_count(entry.class_id, i, entry.cnt_1);
+          const size_t max_length_variation =
+              max_diff - entry.cnt_0 - entry.cnt_1;
 
-            if ((i != entry.cnt_0 && count > 0) ||
-                (i == entry.cnt_0 && count > 1)) {
-              is_unique = false;
-              break;
+          for (size_t other_remaining_length =
+                   entry.remaining_length -
+                   std::min(max_length_variation, entry.remaining_length);
+               other_remaining_length <=
+               entry.remaining_length + max_length_variation;
+               ++other_remaining_length) {
+            const size_t length_variation =
+                other_remaining_length > entry.remaining_length
+                    ? other_remaining_length - entry.remaining_length
+                    : entry.remaining_length - other_remaining_length;
+
+            for (size_t i = 0;
+                 entry.cnt_0 + entry.cnt_1 + i + length_variation <= max_diff;
+                 ++i) {
+              const size_t count = classes.get_rows_count(
+                  entry.class_id, i, entry.cnt_1, other_remaining_length);
+              const bool is_same =
+                  i == entry.cnt_0 &&
+                  other_remaining_length == entry.remaining_length;
+
+              if ((!is_same && count > 0) || (is_same && count > 1)) {
+                is_unique = false;
+                break;
+              }
             }
           }
 
@@ -499,7 +521,7 @@ class Tables {
       // logging::log_value(current_classes.size(), "classes_cnt.csv");
     }
 
-    auto total = classes.accumulate_counts();
+    auto prefix_sums = classes.accumulate_counts();
 
     std::vector<std::vector<std::vector<std::pair<size_t, size_t>>>> m(
         max_diff + 1);
@@ -507,7 +529,7 @@ class Tables {
       m[i].resize(max_diff + 1);
 
       for (size_t j = 0; j <= max_diff; ++j) {
-        m[i][j].resize(total[i][j]);
+        m[i][j].resize(prefix_sums.back()[i * (max_diff + 1) + j]);
       }
     }
 
@@ -517,8 +539,9 @@ class Tables {
       }
 
       for (const auto entry : rows[row]) {
-        m[entry.cnt_0][entry.cnt_1][--classes.get_rows_count(entry)] = {
-            entry.class_id, row};
+        m[entry.cnt_0][entry.cnt_1]
+         [--prefix_sums[entry.class_id][entry.cnt_0 * (max_diff + 1) +
+                                        entry.cnt_1]] = {entry.class_id, row};
       }
     }
 
