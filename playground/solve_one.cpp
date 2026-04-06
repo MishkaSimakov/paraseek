@@ -17,7 +17,7 @@ int main() {
 
   seekers::TablesParameters params{
       .groups_count = 4,
-      .max_small_row_size = 15,
+      .max_small_row_size = 8,
   };
 
   auto start = std::chrono::steady_clock::now();

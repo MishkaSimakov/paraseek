@@ -21,7 +21,7 @@ int main() {
 
     seekers::TablesParameters params{
         .groups_count = 4,
-        .max_small_row_size = 4,
+        .max_small_row_size = 8,
     };
 
     auto seeker = seekers::Tables(2, params);
