@@ -154,6 +154,8 @@ class CSCMatrix {
 
     return result;
   }
+
+  bool operator==(const CSCMatrix& other) const = default;
 };
 
 template <typename Field>

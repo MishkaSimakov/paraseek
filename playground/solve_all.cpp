@@ -15,9 +15,9 @@ int main() {
     const auto problem_name = problems_names[i];
     std::println("{}/{}: {}", i + 1, problems_names.size(), problem_name);
 
-    auto matrix = get_problem_matrix(problem_name);
-    std::println("  size: {} x {}", matrix.shape().first,
-                 matrix.shape().second);
+    auto matrix = get_problem_matrix(problem_name, false);
+    std::println("  size: {} x {} (nz = {})", matrix.shape().first,
+                 matrix.shape().second, matrix.nonzero_count());
 
     seekers::TablesParameters params{
         .groups_count = 4,

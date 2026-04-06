@@ -2,11 +2,12 @@
 
 #include <format>
 
-#include "../matrix/CSCMatrix.h"
-#include "../utils/Paths.h"
-#include "MPS.h"
+#include "matrix/CSCMatrix.h"
+#include "mps/MPS.h"
+#include "utils/Paths.h"
 
-inline CSCMatrix<double> get_problem_matrix(std::string name) {
+inline CSCMatrix<double> get_problem_matrix(std::string name,
+                                            bool replace_inequalities = false) {
   auto archive_path = paths::problem(name + ".mps.gz");
   auto path = paths::problem(name + ".mps");
 
@@ -20,8 +21,9 @@ inline CSCMatrix<double> get_problem_matrix(std::string name) {
     }
   }
 
-  auto reader = MPSReader<double>(MPSFieldsMode::SPACE_SEPARATED);
+  auto reader = mps::MPSReader<double>(mps::Format::FREE);
   reader.read(path);
 
-  return reader.get_A();
+  return reader.get_A(replace_inequalities);
 }
+
