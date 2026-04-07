@@ -11,7 +11,7 @@
 namespace splitters {
 
 inline int64_t normalize_double(double value) {
-  return std::round(value * 1e10);
+  return static_cast<int64_t>(std::round(value * 1e10));
 }
 
 struct Block {
@@ -25,9 +25,9 @@ struct EvaluationResult {
 };
 
 EvaluationResult evaluate(const CSCMatrix<double>& matrix,
-                          const std::vector<std::vector<size_t>>& groups) {
+                          const std::vector<std::vector<size_t>>& groups,
+                          size_t max_diff) {
   const auto [n, d] = matrix.shape();
-  const auto transposed = matrix.get_transposed();
 
   size_t score = 0;
   std::unordered_map<std::pair<size_t, int64_t>, size_t> map;
@@ -35,36 +35,45 @@ EvaluationResult evaluate(const CSCMatrix<double>& matrix,
   std::vector<size_t> rows_order(n);
   std::iota(rows_order.begin(), rows_order.end(), 0);
 
-  for (size_t group_id = 0; group_id < groups.size(); ++group_id) {
+  std::vector<bool> mask(groups.size(), false);
+  std::fill_n(mask.begin(), groups.size() - max_diff, true);
+
+  do {
     std::vector<Block> blocks(n);
     size_t classes_cnt = 1;
 
-    for (const size_t col : groups[group_id]) {
-      map.clear();
+    for (size_t group_id = 0; group_id < groups.size(); ++group_id) {
+      if (!mask[group_id]) {
+        continue;
+      }
 
-      for (auto [row, value] : matrix.get_column(col)) {
-        if (blocks[row].front == 0) {
-          blocks[row].front = value;
+      for (const size_t col : groups[group_id]) {
+        map.clear();
+
+        for (auto [row, value] : matrix.get_column(col)) {
+          if (blocks[row].front == 0) {
+            blocks[row].front = value;
+          }
+
+          auto normalized = normalize_double(value / blocks[row].front);
+
+          auto [itr, new_class] = map.emplace(
+              std::pair{blocks[row].class_id, normalized}, classes_cnt);
+
+          if (new_class) {
+            ++classes_cnt;
+          }
+
+          blocks[row].class_id = itr->second;
         }
-
-        auto normalized = normalize_double(value / blocks[row].front);
-
-        auto [itr, new_class] = map.emplace(
-            std::pair{blocks[row].class_id, normalized}, classes_cnt);
-
-        if (new_class) {
-          ++classes_cnt;
-        }
-
-        blocks[row].class_id = itr->second;
       }
     }
 
-    // std::map<size_t, size_t> classes_sizes;
-    // for (const Block& block : blocks) {
-    //   ++classes_sizes[block.class_id];
-    // }
-    //
+    std::map<size_t, size_t> classes_sizes;
+    for (const Block& block : blocks) {
+      ++classes_sizes[block.class_id];
+    }
+
     // std::vector<std::pair<size_t, size_t>> by_size;
     // for (auto [cls, size] : classes_sizes) {
     //   by_size.emplace_back(cls, size);
@@ -78,43 +87,12 @@ EvaluationResult evaluate(const CSCMatrix<double>& matrix,
     //   std::println("    {} (size = {})", p.first, p.second);
     // }
 
-    // for (size_t value : classes_sizes | std::views::values) {
-    //   if (value > 1) {
-    //     score += value * value;
-    //   }
-    // }
-
-    std::ranges::sort(rows_order, {}, [&](size_t row) {
-      return std::pair{blocks[row].class_id, transposed[row].size()};
-    });
-
-    size_t i_start = 0;
-    while (i_start < n) {
-      const size_t j_start = i_start;
-      size_t j_end = i_start + 1;
-
-      for (; j_end < n &&
-             blocks[rows_order[j_end]].class_id ==
-                 blocks[rows_order[i_start]].class_id &&
-             transposed[rows_order[j_end]].size() <=
-                 transposed[rows_order[j_start]].size() + 2;
-           ++j_end) {
+    for (size_t value : classes_sizes | std::views::values) {
+      if (value > 1) {
+        score += value * value;
       }
-
-      size_t i_end = i_start + 1;
-      while (j_end < n &&
-             blocks[rows_order[i_end]].class_id ==
-                 blocks[rows_order[i_start]].class_id &&
-             transposed[rows_order[i_start]].size() ==
-                 transposed[rows_order[i_end]].size()) {
-        ++i_end;
-      }
-
-      score += (i_end - i_start - 1) * (j_end - j_start - 1);
-
-      i_start = i_end;
     }
-  }
+  } while (std::ranges::prev_permutation(mask).found);
 
   // check correctness
   std::vector<bool> columns(d, false);

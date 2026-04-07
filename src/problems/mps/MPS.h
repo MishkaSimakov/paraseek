@@ -21,6 +21,13 @@
 
 namespace mps {
 
+struct Problem {
+  CSCMatrix<double> A;
+  Matrix<double> b;
+
+  std::vector<Bound<double>> bounds;
+};
+
 template <typename Field>
 class MPSReader {
   enum class SectionType {
@@ -253,7 +260,7 @@ class MPSReader {
   }
 
   // TODO: support for ranges
-  CSCMatrix<Field> get_A(bool replace_inequalities) const {
+  Problem get_problem(bool replace_inequalities) const {
     std::unordered_map<std::string, size_t> rows_enumeration;
     rows_enumeration.reserve(rows_.size());
 
@@ -263,10 +270,10 @@ class MPSReader {
       }
     }
 
-    CSCMatrix<Field> result(rows_enumeration.size());
+    CSCMatrix<Field> A(rows_enumeration.size());
 
     for (const auto& [_, info] : variables_) {
-      result.add_column();
+      A.add_column();
 
       for (auto [row_name, coef] : info.rows) {
         const auto& row = rows_.at(row_name);
@@ -275,7 +282,7 @@ class MPSReader {
           continue;
         }
 
-        result.push_to_last_column(rows_enumeration.at(row_name), coef);
+        A.push_to_last_column(rows_enumeration.at(row_name), coef);
       }
     }
 
@@ -288,16 +295,32 @@ class MPSReader {
         const size_t index = rows_enumeration.at(name);
 
         if (row.type == RowType::LESS_THAN) {
-          result.add_column();
-          result.push_to_last_column(index, 1);
+          A.add_column();
+          A.push_to_last_column(index, 1);
         } else if (row.type == RowType::GREATER_THAN) {
-          result.add_column();
-          result.push_to_last_column(index, -1);
+          A.add_column();
+          A.push_to_last_column(index, -1);
         }
       }
     }
 
-    return result;
+    // rhs column
+    Matrix<double> b(rows_enumeration.size(), 1);
+
+    for (const auto& [name, row] : rows_) {
+      if (row.type == RowType::OBJECTIVE) {
+        continue;
+      }
+
+      const size_t index = rows_enumeration.at(name);
+      b[index, 0] = row.rhs;
+    }
+
+    // bounds
+    // TODO: ...
+    std::vector<Bound<double>> bounds;
+
+    return {A, b, bounds};
   }
 
   // generates a problem suitable for simplex method:

@@ -16,9 +16,10 @@ size_t similarity::hamming_fixed_ratio(const SparseVector<double>& x,
   return diff;
 }
 
-size_t similarity::hamming(const SparseVector<double>& x,
-                           const SparseVector<double>& y) {
+std::pair<size_t, double> similarity::hamming(const SparseVector<double>& x,
+                                              const SparseVector<double>& y) {
   size_t distance = x.size() + y.size();
+  double min_distance_ratio = 1.;
 
   for (auto [alpha_index, x_value] : x) {
     double y_value;
@@ -36,10 +37,16 @@ size_t similarity::hamming(const SparseVector<double>& x,
       continue;
     }
 
-    distance = std::min(distance, hamming_fixed_ratio(x, y, x_value / y_value));
+    const double ratio = x_value / y_value;
+    const size_t new_distance = hamming_fixed_ratio(x, y, ratio);
+
+    if (new_distance < distance) {
+      distance = new_distance;
+      min_distance_ratio = ratio;
+    }
   }
 
-  return distance;
+  return {distance, min_distance_ratio};
 }
 
 size_t similarity::fast_hamming(const SparseVector<double>& x,
@@ -64,9 +71,9 @@ size_t similarity::fast_hamming(const SparseVector<double>& x,
   size_t diff = 0;
 
   for (auto [i, x, y] : SparseZipRange{x, y}) {
-    double ratio = y != 0 ? x / y : inf;
+    const double ratio = y != 0 ? x / y : inf;
 
-    if (ratio != current_ratio) {
+    if (!FieldTraits<double>::is_nonzero(ratio - current_ratio)) {
       ++diff;
     }
   }

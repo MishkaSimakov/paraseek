@@ -28,7 +28,7 @@ int main() {
                  matrix.shape().second, matrix.nonzero_count());
 
     auto result = splitters::GreedySplitter().split(matrix, 4);
-    auto evaluation = splitters::evaluate(matrix, result);
+    auto evaluation = splitters::evaluate(matrix, result, 2);
 
     if (!evaluation.is_valid) {
       throw std::runtime_error("Invalid split.");
@@ -56,7 +56,7 @@ int main() {
 
     CSCMatrix<double> matrix2(zero_rows_enumeration.size());
 
-    for (size_t group = 1; group < 2; ++group) {
+    for (size_t group = 1; group < 4; ++group) {
       for (size_t col : result[group]) {
         matrix2.add_column();
 
@@ -69,8 +69,8 @@ int main() {
     }
 
     {
-      auto result = splitters::GreedySplitter().split(matrix2, 2);
-      auto evaluation = splitters::evaluate(matrix2, result);
+      auto result = splitters::GreedySplitter().split(matrix2, 4);
+      auto evaluation = splitters::evaluate(matrix2, result, 2);
 
       if (!evaluation.is_valid) {
         throw std::runtime_error("Invalid split.");

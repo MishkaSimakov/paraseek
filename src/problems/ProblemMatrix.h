@@ -24,6 +24,5 @@ inline CSCMatrix<double> get_problem_matrix(std::string name,
   auto reader = mps::MPSReader<double>(mps::Format::FREE);
   reader.read(path);
 
-  return reader.get_A(replace_inequalities);
+  return reader.get_problem(replace_inequalities).A;
 }
-

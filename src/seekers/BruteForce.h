@@ -56,8 +56,9 @@ class BruteForce {
            j < n && counts[j].second <= counts[i].second + max_diff; ++j) {
         ++statistics_.pairs_considered;
 
-        size_t diff =
-            similarity::hamming(rows[counts[i].first], rows[counts[j].first]);
+        const size_t diff =
+            similarity::hamming(rows[counts[i].first], rows[counts[j].first])
+                .first;
 
         if (diff <= max_diff) {
           add_to_result(result, counts[i].first, counts[j].first);

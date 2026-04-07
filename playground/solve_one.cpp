@@ -17,6 +17,7 @@ int main() {
       .groups_count = 4,
       .max_small_row_size = 8,
       .log_entries_growth = true,
+      .log_entries_per_row = false,
   };
 
   auto start = std::chrono::steady_clock::now();

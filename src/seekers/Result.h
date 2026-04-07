@@ -22,4 +22,6 @@ struct Result {
 
 SingularResult normalize_result(const Result& result);
 
+std::vector<size_t> only_one(size_t rows_count, const Result& result);
+
 }  // namespace seekers
