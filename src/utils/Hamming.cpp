@@ -1,5 +1,8 @@
 #include "utils/Hamming.h"
 
+#include <algorithm>
+#include <cassert>
+
 #include "ZipRows.h"
 
 size_t similarity::hamming_fixed_ratio(const SparseVector<double>& x,
@@ -14,6 +17,24 @@ size_t similarity::hamming_fixed_ratio(const SparseVector<double>& x,
   }
 
   return diff;
+}
+
+bool similarity::hamming_fixed_ratio_leq(const SparseVector<double>& x,
+                                         const SparseVector<double>& y,
+                                         double ratio, size_t max_distance) {
+  size_t diff = 0;
+
+  for (auto [i, x, y] : SparseZipRange{x, y}) {
+    if (FieldTraits<double>::is_nonzero(x - y * ratio)) {
+      ++diff;
+
+      if (diff > max_distance) {
+        return false;
+      }
+    }
+  }
+
+  return true;
 }
 
 std::pair<size_t, double> similarity::hamming(const SparseVector<double>& x,
@@ -73,10 +94,75 @@ size_t similarity::fast_hamming(const SparseVector<double>& x,
   for (auto [i, x, y] : SparseZipRange{x, y}) {
     const double ratio = y != 0 ? x / y : inf;
 
-    if (!FieldTraits<double>::is_nonzero(ratio - current_ratio)) {
+    if (FieldTraits<double>::is_nonzero(ratio - current_ratio)) {
       ++diff;
     }
   }
 
   return diff;
+}
+
+std::optional<double> similarity::hamming_leq(const SparseVector<double>& x,
+                                              const SparseVector<double>& y,
+                                              size_t max_distance) {
+  constexpr size_t kRatiosCapacity = 8;
+  assert(max_distance < kRatiosCapacity);
+
+  std::array<std::pair<double, size_t>, kRatiosCapacity> ratios;
+  ratios.fill({0, 0});
+  size_t xor_diff = 0;
+
+  for (auto [i, x, y] : SparseZipRange{x, y}) {
+    if (!FieldTraits<double>::is_nonzero(x) ||
+        !FieldTraits<double>::is_nonzero(y)) {
+      ++xor_diff;
+
+      if (xor_diff > max_distance) {
+        return std::nullopt;
+      }
+    } else {
+      const double ratio = x / y;
+      bool found_slot = false;
+
+      for (size_t j = 0; j <= max_distance - xor_diff; ++j) {
+        if (!FieldTraits<double>::is_nonzero(ratios[j].first)) {
+          ratios[j].first = ratio;
+          ratios[j].second = 1;
+
+          found_slot = true;
+          break;
+        }
+        if (!FieldTraits<double>::is_nonzero(ratio - ratios[j].first)) {
+          ++ratios[j].second;
+
+          found_slot = true;
+          break;
+        }
+      }
+
+      if (!found_slot) {
+        return std::nullopt;
+      }
+    }
+  }
+
+  size_t total_count = 0;
+
+  size_t max_count = 0;
+  double max_count_ratio = 1;
+
+  for (size_t i = 0; i <= max_distance - xor_diff; ++i) {
+    total_count += ratios[i].second;
+
+    if (max_count < ratios[i].second) {
+      max_count_ratio = ratios[i].first;
+      max_count = ratios[i].second;
+    }
+  }
+
+  if (xor_diff + total_count - max_count > max_distance) {
+    return std::nullopt;
+  }
+
+  return max_count_ratio;
 }

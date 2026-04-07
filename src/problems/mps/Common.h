@@ -6,7 +6,7 @@
 namespace mps {
 
 template <typename Field>
-static Field parse_field(const std::string& str) {
+Field parse_field(const std::string& str) {
   Field result;
   std::stringstream iss(str);
   iss >> result;
@@ -14,6 +14,9 @@ static Field parse_field(const std::string& str) {
   return result;
 }
 
-
+template <>
+inline double parse_field(const std::string& str) {
+  return std::stod(str);
+}
 
 }  // namespace mps

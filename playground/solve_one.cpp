@@ -10,13 +10,13 @@ int main() {
   const auto problem_name = "neos-3402454-bohle";
   std::println("{}", problem_name);
 
-  auto matrix = get_problem_matrix(problem_name);
+  auto matrix = get_problem_matrix(problem_name, true);
   std::println("  size: {} x {}", matrix.shape().first, matrix.shape().second);
 
   seekers::TablesParameters params{
       .groups_count = 4,
       .max_small_row_size = 8,
-      .log_entries_growth = true,
+      .log_entries_growth = false,
       .log_entries_per_row = false,
   };
 
@@ -28,3 +28,5 @@ int main() {
   std::println("  bipartite part: {}", result.bipartite.size());
   std::println("  duration: {}", end - start);
 }
+
+// 634

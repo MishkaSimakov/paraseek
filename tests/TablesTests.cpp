@@ -113,7 +113,7 @@ TEST(TablesTests, RandomizedSmallTest) {
     auto result = seekers::Tables(2, params).seek(matrix);
     auto normalized = seekers::normalize_result(result);
 
-    if (similarity::hamming(matrix.get_row(0), matrix.get_row(1)) <= 2) {
+    if (similarity::hamming(matrix.get_row(0), matrix.get_row(1)).first <= 2) {
       ASSERT_EQ(normalized.singular.size(), 1);
       ASSERT_EQ(normalized.singular[0], (std::pair{0, 1}));
     } else {
