@@ -281,6 +281,10 @@ class MPSReader {
 
     if (replace_inequalities) {
       for (const auto& [name, row] : rows_) {
+        if (row.type == RowType::OBJECTIVE) {
+          continue;
+        }
+
         const size_t index = rows_enumeration.at(name);
 
         if (row.type == RowType::LESS_THAN) {

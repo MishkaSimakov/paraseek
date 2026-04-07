@@ -1,15 +1,13 @@
 #include <chrono>
 #include <print>
 
-#include "matrix/NPY.h"
 #include "problems/ProblemMatrix.h"
 #include "problems/ProblemsNames.h"
 #include "seekers/BruteForce.h"
 #include "seekers/Tables.h"
-#include "utils/Printing.h"
 
 int main() {
-  const auto problem_name = "lectsched-5-obj";
+  const auto problem_name = "neos-3402454-bohle";
   std::println("{}", problem_name);
 
   auto matrix = get_problem_matrix(problem_name);
@@ -18,6 +16,7 @@ int main() {
   seekers::TablesParameters params{
       .groups_count = 4,
       .max_small_row_size = 8,
+      .log_entries_growth = true,
   };
 
   auto start = std::chrono::steady_clock::now();
@@ -27,7 +26,4 @@ int main() {
   std::println("  singular part: {}", result.singular.size());
   std::println("  bipartite part: {}", result.bipartite.size());
   std::println("  duration: {}", end - start);
-
-  auto normalized = seekers::normalize_result(result);
-  std::println("  normalized: {}", normalized.singular.size());
 }

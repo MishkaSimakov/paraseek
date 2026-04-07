@@ -8,20 +8,21 @@
 #include "utils/Printing.h"
 
 int main() {
-  std::ofstream os("output.csv");
+  std::ofstream os(paths::log("runtimes.csv"));
   std::println(os, "problem_name,time,small_rows_time,big_rows_time");
 
   for (size_t i = 0; i < problems_names.size(); ++i) {
     const auto problem_name = problems_names[i];
     std::println("{}/{}: {}", i + 1, problems_names.size(), problem_name);
 
-    auto matrix = get_problem_matrix(problem_name, false);
+    auto matrix = get_problem_matrix(problem_name, true);
     std::println("  size: {} x {} (nz = {})", matrix.shape().first,
                  matrix.shape().second, matrix.nonzero_count());
 
     seekers::TablesParameters params{
         .groups_count = 4,
         .max_small_row_size = 8,
+        .log_entries_growth = false,
     };
 
     auto seeker = seekers::Tables(2, params);
@@ -34,5 +35,8 @@ int main() {
     std::println(os, "{},{},{},{}", problem_name, duration.count(),
                  stats.small_rows_duration.count(),
                  stats.big_rows_duration.count());
+
+    // auto normalized = seekers::normalize_result(result);
+    // std::println("  size: {}", normalized.singular.size());
   }
 }

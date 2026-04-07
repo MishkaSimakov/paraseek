@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <map>
 #include <numeric>
 #include <set>
 #include <unordered_map>
@@ -62,6 +63,10 @@ class ClassesStorage {
  public:
   ClassesStorage(size_t max_diff, size_t rows_count) : max_diff(max_diff) {
     extend_classes_storage(std::max(rows_count, 64uz));
+  }
+
+  size_t get_used_classes_count() const {
+    return classes_.size() - free_classes_.size();
   }
 
   size_t& get_rows_count(size_t class_id, size_t cnt_0, size_t cnt_1) {
@@ -167,6 +172,8 @@ class RowHasher {
 struct TablesParameters {
   size_t groups_count;
   size_t max_small_row_size;
+
+  bool log_entries_growth = false;
 };
 
 class Tables {
@@ -176,8 +183,7 @@ class Tables {
   };
 
   const size_t max_diff;
-  const size_t groups_count;
-  const size_t max_small_row_size;
+  const TablesParameters params;
 
   Statistics statistics_;
 
@@ -195,7 +201,7 @@ class Tables {
   }
 
   // For each row a list of blocks is returned
-  static std::vector<std::vector<Block>> get_blocks(
+  std::vector<std::vector<Block>> get_blocks(
       const CSCMatrix<double>& matrix,
       const std::vector<std::vector<size_t>>& groups) {
     auto [n, d] = matrix.shape();
@@ -269,29 +275,38 @@ class Tables {
 
     std::vector<size_t> merged_classes(n);
     std::vector<double> front(n, 0);
-    std::unordered_map<size_t, size_t> classes_sizes;
+    std::map<size_t, size_t> classes_sizes;
 
-    for (size_t i = 0; i < n; ++i) {
-      if (transposed_[i].size() <= max_small_row_size) {
-        continue;
-      }
+    for (size_t row = 0; row < n; ++row) {
+      // if (transposed_[row].size() <= params.max_small_row_size) {
+        // continue;
+      // }
 
       // TODO: correct seed? RowHasher?
       StreamHasher hasher;
 
       for (size_t group_id = 0; group_id < groups_mask.size(); ++group_id) {
         if (groups_mask[group_id]) {
-          if (front[i] == 0) {
-            front[i] = blocks[i][group_id].front;
+          if (front[row] == 0) {
+            front[row] = blocks[row][group_id].front;
           }
 
-          hasher << blocks[i][group_id].class_id;
+          hasher << blocks[row][group_id].class_id;
         }
       }
 
-      merged_classes[i] = hasher.get_hash();
-      ++classes_sizes[merged_classes[i]];
+      merged_classes[row] = hasher.get_hash();
+      ++classes_sizes[merged_classes[row]];
     }
+
+    size_t runtime = 0;
+    for (size_t class_size : classes_sizes | std::views::values) {
+      if (class_size > 1) {
+        runtime += class_size * class_size;
+      }
+    }
+
+    logging::log_value(runtime, "classes_sizes_square.csv");
 
     size_t prev = 0;
     for (auto& [key, value] : classes_sizes) {
@@ -301,14 +316,16 @@ class Tables {
 
     // total count of big rows is stored in prev after previous loop
     std::vector<size_t> indices(prev);
-    for (size_t i = 0; i < n; ++i) {
-      if (transposed_[i].size() > max_small_row_size) {
-        indices[--classes_sizes[merged_classes[i]]] = i;
-      }
+    for (size_t row = 0; row < n; ++row) {
+      // if (transposed_[row].size() <= params.max_small_row_size) {
+        // continue;
+      // }
+
+      indices[--classes_sizes[merged_classes[row]]] = row;
     }
 
     for (size_t i = 0; i < prev; ++i) {
-      if (transposed_[indices[i]].size() <= max_small_row_size) {
+      if (transposed_[indices[i]].size() <= params.max_small_row_size) {
         continue;
       }
 
@@ -380,7 +397,17 @@ class Tables {
 
   void seek_small(const CSCMatrix<double>& matrix) {
     const auto [n, d] = matrix.shape();
-    const size_t max_size = max_small_row_size + max_diff;
+
+    // sort columns by size
+    std::vector<size_t> columns_order(d);
+    std::iota(columns_order.begin(), columns_order.end(), 0);
+
+    std::ranges::sort(columns_order, {}, [&](size_t col) {
+      return matrix.get_column(col).size();
+    });
+
+    //
+    const size_t max_size = params.max_small_row_size + max_diff;
 
     size_t small_rows_cnt = 0;
     for (size_t i = 0; i < n; ++i) {
@@ -406,7 +433,7 @@ class Tables {
       }
     }
 
-    for (size_t col = 0; col < d; ++col) {
+    for (const size_t col : columns_order) {
       for (auto [row, value] : matrix.get_column(col)) {
         if (transposed_[row].size() > max_size) {
           continue;
@@ -489,14 +516,31 @@ class Tables {
         entries = std::move(new_entries);
       }
 
-      // std::unordered_set<size_t> current_classes;
-      // for (const auto& row : rows) {
-      //   for (const auto& entry : row) {
-      //     current_classes.insert(entry.class_id);
-      //   }
-      // }
-      //
-      // logging::log_value(current_classes.size(), "classes_cnt.csv");
+      // log entries growth
+      if (params.log_entries_growth) {
+        // classes count
+        size_t total_entries = 0;
+        for (const auto& entries : rows) {
+          total_entries += entries.size();
+        }
+
+        // considered entries
+        size_t considered_entries = 0;
+
+        for (auto [row, value] : matrix.get_column(col)) {
+          if (transposed_[row].size() <= max_size) {
+            considered_entries += rows[row].size();
+          }
+        }
+
+        logging::log_csv<size_t>(
+            {
+                {"column", col},
+                {"classes_cnt", classes.get_used_classes_count()},
+                {"considered_entries", considered_entries},
+            },
+            "classes_cnt.csv");
+      }
     }
 
     auto total = classes.accumulate_counts();
@@ -533,9 +577,7 @@ class Tables {
 
  public:
   explicit Tables(size_t max_diff, TablesParameters params)
-      : max_diff(max_diff),
-        groups_count(params.groups_count),
-        max_small_row_size(params.max_small_row_size) {
+      : max_diff(max_diff), params(params) {
     if (max_diff != 2) {
       throw std::invalid_argument("Not implemented");
     }
@@ -551,62 +593,62 @@ class Tables {
                           .max_small_row_size = max_diff * 2}) {}
 
   Result seek(const CSCMatrix<double>& matrix) {
-    const size_t selected_groups_count = groups_count - max_diff;
+    const size_t selected_groups_count = params.groups_count - max_diff;
 
     auto [n, d] = matrix.shape();
     transposed_ = matrix.get_transposed();
 
     //
-    std::vector<std::vector<size_t>> groups(groups_count);
+    std::vector<std::vector<size_t>> groups(params.groups_count);
 
     // TODO: maybe implement some algorithm for choosing groups
-    for (size_t col = 0; col < d; ++col) {
-      groups[std::hash<size_t>()(col) % groups_count].push_back(col);
-    }
+    // for (size_t col = 0; col < d; ++col) {
+    //   groups[std::hash<size_t>()(col) % params.groups_count].push_back(col);
+    // }
 
     // greedy algorithm
-    // std::vector<std::vector<bool>> groups_zero_rows_mask(n);
-    // for (size_t row = 0; row < n; ++row) {
-    //   groups_zero_rows_mask[row].resize(groups_count, false);
-    // }
-    //
-    // for (size_t col = 0; col < d; ++col) {
-    //   std::vector<size_t> increment_per_group(groups_count, 0);
-    //
-    //   for (const auto [row, value] : matrix.get_column(col)) {
-    //     if (transposed_[row].size() <= max_small_row_size) {
-    //       continue;
-    //     }
-    //
-    //     for (size_t i = 0; i < groups_count; ++i) {
-    //       if (!groups_zero_rows_mask[row][i]) {
-    //         ++increment_per_group[i];
-    //       }
-    //     }
-    //   }
-    //
-    //   size_t max_increment_group = 0;
-    //   for (size_t i = 0; i < groups_count; ++i) {
-    //     if (increment_per_group[i] >
-    //     increment_per_group[max_increment_group]) {
-    //       max_increment_group = i;
-    //     }
-    //   }
-    //
-    //   groups[max_increment_group].push_back(col);
-    //
-    //   for (const auto [row, value] : matrix.get_column(col)) {
-    //     if (transposed_[row].size() <= max_small_row_size) {
-    //       continue;
-    //     }
-    //
-    //     groups_zero_rows_mask[row][max_increment_group] = true;
-    //   }
-    // }
+    std::vector<std::vector<bool>> groups_zero_rows_mask(n);
+    for (size_t row = 0; row < n; ++row) {
+      groups_zero_rows_mask[row].resize(params.groups_count, false);
+    }
+
+    for (size_t col = 0; col < d; ++col) {
+      std::vector<size_t> increment_per_group(params.groups_count, 0);
+
+      for (const auto [row, value] : matrix.get_column(col)) {
+        // if (transposed_[row].size() <= params.max_small_row_size) {
+          // continue;
+        // }
+
+        for (size_t i = 0; i < params.groups_count; ++i) {
+          if (!groups_zero_rows_mask[row][i]) {
+            ++increment_per_group[i];
+          }
+        }
+      }
+
+      size_t max_increment_group = 0;
+      for (size_t i = 0; i < params.groups_count; ++i) {
+        if (increment_per_group[i] >
+        increment_per_group[max_increment_group]) {
+          max_increment_group = i;
+        }
+      }
+
+      groups[max_increment_group].push_back(col);
+
+      for (const auto [row, value] : matrix.get_column(col)) {
+        // if (transposed_[row].size() <= params.max_small_row_size) {
+          // continue;
+        // }
+
+        groups_zero_rows_mask[row][max_increment_group] = true;
+      }
+    }
 
     auto blocks = get_blocks(matrix, groups);
 
-    std::vector<bool> mask(groups_count, false);
+    std::vector<bool> mask(params.groups_count, false);
     std::fill_n(mask.begin(), selected_groups_count, true);
 
     statistics_.big_rows_duration = timing::timeit([&] {
