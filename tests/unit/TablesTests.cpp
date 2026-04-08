@@ -3,6 +3,7 @@
 #include <random>
 #include <unordered_set>
 
+#include "helpers/RandomProblem.h"
 #include "problems/ProblemMatrix.h"
 #include "problems/ProblemsNames.h"
 #include "seekers/BruteForce.h"
@@ -10,52 +11,45 @@
 #include "seekers/Tables.h"
 #include "utils/Printing.h"
 
+void compare_tables_with_brute_force(const CSCMatrix<double>& matrix,
+                                     seekers::TablesParameters tables_params) {
+  auto bf_result = seekers::BruteForce(2).seek(matrix);
+  auto tbls_result = seekers::Tables(2, tables_params).seek(matrix);
+
+  auto tbls_normalized = seekers::normalize_result(tbls_result).as_set();
+
+  for (const auto p : bf_result) {
+    auto itr = tbls_normalized.find(p);
+
+    ASSERT_FALSE(itr == tbls_normalized.end());
+    tbls_normalized.erase(itr);
+  }
+
+  ASSERT_TRUE(tbls_normalized.empty());
+}
+
 TEST(TablesTests, CompareWithBruteForce) {
   for (size_t i = 0; i < 100 && i < problems_names.size(); ++i) {
-    auto matrix = get_problem_matrix(problems_names[i]);
+    SCOPED_TRACE(std::format("problem name: {}", problems_names[i]));
 
-    auto bf_result = seekers::BruteForce(2).seek(matrix);
-    auto tbls_result = seekers::Tables(2).seek(matrix);
-
-    auto tbls_normalized = seekers::normalize_result(tbls_result).as_set();
-
-    for (auto p : bf_result) {
-      auto itr = tbls_normalized.find(p);
-
-      ASSERT_FALSE(itr == tbls_normalized.end())
-          << std::format("failed for problem: {}", problems_names[i]);
-      tbls_normalized.erase(itr);
-    }
-
-    ASSERT_TRUE(tbls_normalized.empty())
-        << std::format("failed for problem: {}", problems_names[i]);
+    auto matrix = get_problem_matrices(problems_names[i]).A;
+    ASSERT_NO_FATAL_FAILURE(compare_tables_with_brute_force(
+        matrix, {.groups_count = 4, .max_small_row_size = 4}));
   }
 }
 
 TEST(TablesTests, CompareWithBruteForceAllRowsSmall) {
   for (size_t i = 0; i < 100 && i < problems_names.size(); ++i) {
-    auto matrix = get_problem_matrix(problems_names[i]);
+    SCOPED_TRACE(std::format("problem name: {}", problems_names[i]));
 
-    auto bf_result = seekers::BruteForce(2).seek(matrix);
+    auto matrix = get_problem_matrices(problems_names[i]).A;
 
-    seekers::TablesParameters params{
+    const seekers::TablesParameters params{
         .groups_count = 4,
         .max_small_row_size = matrix.shape().second,
     };
-    auto tbls_result = seekers::Tables(2, params).seek(matrix);
 
-    auto tbls_normalized = seekers::normalize_result(tbls_result).as_set();
-
-    for (auto p : bf_result) {
-      auto itr = tbls_normalized.find(p);
-
-      ASSERT_FALSE(itr == tbls_normalized.end())
-          << std::format("failed for problem: {}", problems_names[i]);
-      tbls_normalized.erase(itr);
-    }
-
-    ASSERT_TRUE(tbls_normalized.empty())
-        << std::format("failed for problem: {}", problems_names[i]);
+    ASSERT_NO_FATAL_FAILURE(compare_tables_with_brute_force(matrix, params));
   }
 }
 
@@ -119,5 +113,17 @@ TEST(TablesTests, RandomizedSmallTest) {
     } else {
       ASSERT_EQ(normalized.singular.size(), 0);
     }
+  }
+}
+
+TEST(TablesTests, RandomizedTest2) {
+  std::default_random_engine random;
+
+  for (size_t i = 0; i < 1'000; ++i) {
+    auto problem = generate_random_problem(50, 1000, random);
+
+    ASSERT_NO_FATAL_FAILURE(compare_tables_with_brute_force(
+        problem.A, {.groups_count = 4, .max_small_row_size = 4}))
+        << problem.A;
   }
 }

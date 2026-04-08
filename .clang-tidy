@@ -1,4 +1,6 @@
-{ Checks: 'readability-*, -misc-no-recursion, -readability-non-const-parameter, -modernize-use-nodiscard, -readability-math-missing-parentheses, -readability-magic-numbers',
+{
+#    cert-msc51-cpp ensures random number generator is properly seeded
+  Checks: 'readability-*, -misc-no-recursion, -readability-non-const-parameter, -modernize-use-nodiscard, -readability-math-missing-parentheses, -readability-magic-numbers, -cert-msc51-cpp',
   WarningsAsErrors: '*',
   CheckOptions: [
     { key: readability-identifier-naming.TypeTemplateParameterIgnoredRegexp,

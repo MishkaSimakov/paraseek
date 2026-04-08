@@ -16,17 +16,11 @@
 #include "RowsParser.h"
 #include "matrix/Matrix.h"
 #include "problems/Bound.h"
+#include "problems/Problem.h"
 #include "utils/String.h"
 #include "utils/Variant.h"
 
 namespace mps {
-
-struct Problem {
-  CSCMatrix<double> A;
-  Matrix<double> b;
-
-  std::vector<Bound<double>> bounds;
-};
 
 template <typename Field>
 class MPSReader {
@@ -271,7 +265,9 @@ class MPSReader {
     }
 
     CSCMatrix<Field> A(rows_enumeration.size());
+    std::vector<double> c(variables_.size(), 0);
 
+    size_t i = 0;
     for (const auto& [_, info] : variables_) {
       A.add_column();
 
@@ -279,11 +275,14 @@ class MPSReader {
         const auto& row = rows_.at(row_name);
 
         if (row.type == RowType::OBJECTIVE) {
+          c[i] = coef;
           continue;
         }
 
         A.push_to_last_column(rows_enumeration.at(row_name), coef);
       }
+
+      ++i;
     }
 
     if (replace_inequalities) {
@@ -305,7 +304,7 @@ class MPSReader {
     }
 
     // rhs column
-    Matrix<double> b(rows_enumeration.size(), 1);
+    std::vector<double> b(rows_enumeration.size());
 
     for (const auto& [name, row] : rows_) {
       if (row.type == RowType::OBJECTIVE) {
@@ -313,14 +312,14 @@ class MPSReader {
       }
 
       const size_t index = rows_enumeration.at(name);
-      b[index, 0] = row.rhs;
+      b[index] = row.rhs;
     }
 
     // bounds
     // TODO: ...
-    std::vector<Bound<double>> bounds;
+    std::vector<Bound<double>> bounds(variables_.size());
 
-    return {A, b, bounds};
+    return {A, b, c, bounds};
   }
 
   // generates a problem suitable for simplex method:
