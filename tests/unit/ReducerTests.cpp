@@ -38,6 +38,7 @@ void assert_reducer_correct(
 
   // std::cout << problem.A << std::endl;
   // std::cout << reduced.A << std::endl;
+
   //
   // for (auto bound : problem.bounds) {
   //   std::cout << bound << " ";
@@ -119,6 +120,23 @@ TEST(ReducerTests, test_small_problem_2) {
   ASSERT_NO_FATAL_FAILURE(assert_reducer_correct(problem, {{0, 1}}));
 }
 
+TEST(ReducerTests, test_small_problem_3) {
+  CSCMatrix<double> A = {
+      {1, 2, 0, 0},
+      {1, 2, 3, 0},
+      {0, 0, 3, 3},
+  };
+
+  std::vector<double> b = {1, 2, 3};
+  std::vector<double> c = {1, 2, 3, 4};
+
+  std::vector<Bound<double>> bounds(4);
+
+  const Problem problem(A, b, c, bounds);
+
+  ASSERT_NO_FATAL_FAILURE(assert_reducer_correct(problem, {{0, 1}}));
+}
+
 TEST(ReducerTests, test_random_small) {
   std::default_random_engine random;
 
@@ -134,7 +152,7 @@ TEST(ReducerTests, test_random_small) {
 
   for (size_t i = 0; i < 10'000; ++i) {
     auto problem = generate_random_problem(rows_count, 5, random);
-
+    
     ASSERT_NO_FATAL_FAILURE(assert_reducer_correct(problem, rows));
   }
 }

@@ -5,9 +5,11 @@
 #include "problems/Problem.h"
 #include "utils/Random.h"
 
+// If feasible = false, then returned problem may not be feasible.
 template <typename Gen>
   requires std::uniform_random_bit_generator<std::remove_reference_t<Gen>>
-Problem generate_random_problem(size_t n, size_t d, Gen&& generator) {
+Problem generate_random_problem(size_t n, size_t d, Gen&& generator,
+                                bool feasible = true) {
   std::uniform_real_distribution<double> alpha_dist(0.1, 10);
   std::uniform_real_distribution<double> value_dist(-5.0, 5.0);
   std::uniform_real_distribution<double> prob(0.0, 1.0);
@@ -61,6 +63,14 @@ Problem generate_random_problem(size_t n, size_t d, Gen&& generator) {
   for (size_t col = 0; col < d; ++col) {
     for (auto [row, value] : A.get_column(col)) {
       b[row] += value * x_true[col];
+    }
+  }
+
+  if (!feasible) {
+    for (size_t row = 0; row < n; ++row) {
+      if (prob(generator) < 0.5) {
+        b[row] += value_dist(generator);
+      }
     }
   }
 

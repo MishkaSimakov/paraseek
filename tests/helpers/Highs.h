@@ -59,6 +59,14 @@ inline HighsLp to_highs(const Problem& problem) {
 }
 
 inline Solution solve(const Problem& problem) {
+  if (problem.proven_unfeasible) {
+    return {
+        .status = HighsModelStatus::kInfeasible,
+        .objective = 0,
+        .x = std::vector<double>(problem.A.shape().second, 0),
+    };
+  }
+
   Highs highs;
   highs.setOptionValue("output_flag", false);
 

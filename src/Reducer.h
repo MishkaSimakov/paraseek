@@ -29,7 +29,10 @@ class Reducer {
 
     const auto transposed = problem.A.get_transposed();
 
-    auto cols_ds = ExpressionDisjointSet(d);
+    // cols_ds[d] is a special constant variable
+    // if it can be proven that x_i = \beta, then x_i would be in the same
+    // set with cols_ds[d]
+    auto cols_ds = ExpressionDisjointSet(d + 1);
     auto rows_ds = DisjointSet(n);
 
     for (const auto [i, j] : rows) {
@@ -51,12 +54,16 @@ class Reducer {
         }
       }
 
+      rows_ds.unite(i, j);
       if (diff.size() == 2) {
-        // rows_ds.unite(i, j);
-
         cols_ds.unite(diff[0].first, diff[1].first,
                       LinearExpression<double>(-diff[1].second / diff[0].second,
                                                rhs_diff / diff[0].second));
+      } else if (diff.size() == 1) {
+        cols_ds.unite(diff[0].first, d,
+                      LinearExpression<double>(0, rhs_diff / diff[0].second));
+      } else if (diff.size() == 0) {
+        // TODO: problem may be proven to be unfeasible here
       }
     }
 
@@ -74,9 +81,9 @@ class Reducer {
     }
 
     std::unordered_map<size_t, size_t> classes_enumeration;
-    std::vector<std::vector<size_t>> classes(d);
+    std::vector<std::vector<size_t>> classes(d + 1);
 
-    for (size_t col = 0; col < d; ++col) {
+    for (size_t col = 0; col <= d; ++col) {
       auto [leader, expr] = cols_ds.leader(col);
 
       auto [itr, _] =
@@ -84,60 +91,82 @@ class Reducer {
       classes[itr->second].push_back(col);
     }
 
+    // classes_enumeration.size() - 1 because of the constant variables class
+    auto result =
+        Problem::with_size(saved_rows_count, classes_enumeration.size() - 1);
+    result.shift = problem.shift;
+
     // TODO: here problem may be proven to be unfeasible?
-    std::vector<double> updated_b(saved_rows_count);
     for (size_t i = 0; i < n; ++i) {
       if (saved_rows[i] != -1) {
-        updated_b[saved_rows[i]] = problem.b[i];
+        result.b[saved_rows[i]] = problem.b[i];
       }
     }
 
-    CSCMatrix<double> updated_A(saved_rows_count);
-    std::vector<double> updated_c(classes_enumeration.size(), 0);
-    std::vector<Bound<double>> updated_bounds(classes_enumeration.size());
-    double updated_shift = problem.shift;
-
     std::vector<VariableExpression> mapping(d);
 
+    const size_t constant_class = cols_ds.leader(d).first;
     size_t i = 0;
 
-    for (const size_t index : classes_enumeration | std::views::values) {
+    for (const auto [class_id, index] : classes_enumeration) {
       std::map<size_t, double> column;
       double objective_coef = 0;
+      Bound<double> new_bound;
 
       for (const size_t col : classes[index]) {
+        if (col == d) {
+          continue;
+        }
+
         const auto [_, expr] = cols_ds.leader(col);
 
         mapping[col] = {
-            .variable = i,
+            .variable = class_id != constant_class ? i : 0,
             .expression = expr,
         };
 
         for (const auto [row, value] : problem.A.get_column(col)) {
           if (saved_rows[row] != -1) {
             column[saved_rows[row]] += value * expr.alpha();
-            updated_b[saved_rows[row]] -= value * expr.beta();
+            result.b[saved_rows[row]] -= value * expr.beta();
           }
         }
 
         objective_coef += problem.c[col] * expr.alpha();
-        updated_shift += problem.c[col] * expr.beta();
+        result.shift += problem.c[col] * expr.beta();
 
-        updated_bounds[i] ^= expr.inversed().value_at(problem.bounds[col]);
+        new_bound ^= expr.inversed().value_at(problem.bounds[col]);
       }
 
-      updated_A.add_column();
+      if (constant_class == class_id) {
+        // already updated rhs and cost, should check bounds
+        for (const size_t col : classes[index]) {
+          if (col == d) {
+            continue;
+          }
+
+          const auto expr = cols_ds.leader(col).second;
+          assert(expr.alpha() == 0);
+
+          if (!problem.bounds[col].is_inside(expr.beta())) {
+            result.proven_unfeasible = true;
+          }
+        }
+
+        continue;
+      }
+
+      result.bounds[i] = new_bound;
+      result.c[i] = objective_coef;
+
+      result.A.add_column();
       for (const auto [row, value] : column) {
-        updated_A.push_to_last_column(row, value);
+        result.A.push_to_last_column(row, value);
       }
-
-      updated_c[i] = objective_coef;
 
       ++i;
     }
 
-    return std::pair{
-        Problem(updated_A, updated_b, updated_c, updated_bounds, updated_shift),
-        mapping};
+    return std::pair{result, mapping};
   }
 };
