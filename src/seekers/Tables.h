@@ -409,13 +409,38 @@ class Tables {
     }
 
     for (size_t col = 0; col < d; ++col) {
+      if (matrix.get_column(col).size() == 1) {
+        const auto [row, value] = matrix.get_column(col)[0];
+
+        auto& entries = rows[row];
+        // DO NOT REMOVE THIS: entries.size() does change during loop execution
+        const size_t entries_size = entries.size();
+
+        for (size_t i = 0; i < entries_size; ++i) {
+          --classes.get_rows_count(entries[i]);
+          ++entries[i].cnt_0;
+
+          // otherwise this entry will be removed later
+          if (entries[i].cnt_0 + entries[i].cnt_1 <= max_diff) {
+            ++classes.get_rows_count(entries[i]);
+          }
+        }
+
+        std::erase_if(rows[row], [&](const SmallRowEntry& entry) {
+          return entry.cnt_0 + entry.cnt_1 > max_diff;
+        });
+
+        continue;
+      }
+
       for (auto [row, value] : matrix.get_column(col)) {
         if (transposed_[row].size() > max_size) {
           continue;
         }
 
         auto& entries = rows[row];
-        size_t entries_size = entries.size();
+        // DO NOT REMOVE THIS: entries.size() does change during loop execution
+        const size_t entries_size = entries.size();
 
         for (size_t i = 0; i < entries_size; ++i) {
           --classes.get_rows_count(entries[i]);
@@ -429,7 +454,17 @@ class Tables {
               entries.push_back(new_entry);
               ++classes.get_rows_count(new_entry);
             }
+          }
 
+          // if (matrix.get_column(col).size() == 1) {
+          //   // we can safely skip this column, because if the row with
+          //   nonzero
+          //   // is parallel to some other row, then this element is definitely
+          //   // not present there
+          //   continue;
+          // }
+
+          if (entries[i].cnt_0 + entries[i].cnt_1 < max_diff) {
             // class 1 (create new entry)
             {
               SmallRowEntry new_entry = entries[i];
@@ -451,7 +486,6 @@ class Tables {
             auto normalized = normalize_double(value / entries[i].front);
             entries[i].class_id =
                 classes.get_class(entries[i].class_id, normalized, col);
-
             ++classes.get_rows_count(entries[i]);
           }
         }
