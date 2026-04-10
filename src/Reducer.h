@@ -3,14 +3,56 @@
 #include <cassert>
 #include <map>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "DisjointSet.h"
 #include "ExpressionDisjointSet.h"
 #include "matrix/CSCMatrix.h"
 #include "problems/Bound.h"
 #include "problems/Problem.h"
+#include "seekers/Result.h"
 #include "utils/Hamming.h"
+#include "utils/Hashers.h"
 #include "utils/ZipRows.h"
+
+inline std::vector<std::pair<size_t, size_t>> result_for_reducer(
+    const seekers::Result& result) {
+  std::unordered_set<std::pair<size_t, size_t>> pairs;
+
+  auto emplace_pair = [&](size_t i, size_t j) {
+    if (i > j) {
+      pairs.emplace(j, i);
+    } else if (i < j) {
+      pairs.emplace(i, j);
+    }
+  };
+
+  for (auto [i, j] : result.singular) {
+    emplace_pair(i, j);
+  }
+
+  for (const auto& [left, right] : result.bipartite) {
+    if (left.empty() || right.empty()) {
+      continue;
+    }
+
+    if (left.size() < right.size()) {
+      const size_t j = left[0];
+
+      for (const size_t i : right) {
+        emplace_pair(i, j);
+      }
+    } else {
+      const size_t j = right[0];
+
+      for (const size_t i : left) {
+        emplace_pair(i, j);
+      }
+    }
+  }
+
+  return {pairs.begin(), pairs.end()};
+}
 
 struct VariableExpression {
   size_t variable;
@@ -39,6 +81,7 @@ class Reducer {
       auto ratio = similarity::hamming_leq(transposed[i], transposed[j], 2);
 
       if (!ratio) {
+        std::println("error!!!!");
         continue;
       }
 
@@ -55,6 +98,7 @@ class Reducer {
       }
 
       rows_ds.unite(i, j);
+
       if (diff.size() == 2) {
         cols_ds.unite(diff[0].first, diff[1].first,
                       LinearExpression<double>(-diff[1].second / diff[0].second,
@@ -109,9 +153,44 @@ class Reducer {
     size_t i = 0;
 
     for (const auto [class_id, index] : classes_enumeration) {
+      if (constant_class == class_id) {
+        for (const size_t col : classes[index]) {
+          if (col == d) {
+            continue;
+          }
+
+          // x_col = a x_u + b = f1(x_u)
+          // x_d = a x_u + b = f2(x_u)
+          // then: x_col = f1(f2^{-1}(x_d))
+          const auto f1 = cols_ds.leader(col).second;
+          const auto f2 = cols_ds.leader(d).second;
+
+          // x_col = value
+          const double value = f1.composed_with(f2.inversed()).beta();
+          assert(f1.composed_with(f2.inversed()).alpha() == 0);
+
+          mapping[col] = {
+              .variable = 0,
+              .expression = LinearExpression<double>(0, value),
+          };
+
+          if (!problem.bounds[col].is_inside(value)) {
+            result.proven_unfeasible = true;
+          }
+
+          for (const auto [row, coef] : problem.A.get_column(col)) {
+            if (saved_rows[row] != -1) {
+              result.b[saved_rows[row]] -= value * coef;
+            }
+          }
+
+          result.shift += problem.c[col] * value;
+        }
+
+        continue;
+      }
+
       std::map<size_t, double> column;
-      double objective_coef = 0;
-      Bound<double> new_bound;
 
       for (const size_t col : classes[index]) {
         if (col == d) {
@@ -121,7 +200,7 @@ class Reducer {
         const auto [_, expr] = cols_ds.leader(col);
 
         mapping[col] = {
-            .variable = class_id != constant_class ? i : 0,
+            .variable = i,
             .expression = expr,
         };
 
@@ -132,32 +211,11 @@ class Reducer {
           }
         }
 
-        objective_coef += problem.c[col] * expr.alpha();
+        result.c[i] += problem.c[col] * expr.alpha();
         result.shift += problem.c[col] * expr.beta();
 
-        new_bound ^= expr.inversed().value_at(problem.bounds[col]);
+        result.bounds[i] ^= expr.inversed().value_at(problem.bounds[col]);
       }
-
-      if (constant_class == class_id) {
-        // already updated rhs and cost, should check bounds
-        for (const size_t col : classes[index]) {
-          if (col == d) {
-            continue;
-          }
-
-          const auto expr = cols_ds.leader(col).second;
-          assert(expr.alpha() == 0);
-
-          if (!problem.bounds[col].is_inside(expr.beta())) {
-            result.proven_unfeasible = true;
-          }
-        }
-
-        continue;
-      }
-
-      result.bounds[i] = new_bound;
-      result.c[i] = objective_coef;
 
       result.A.add_column();
       for (const auto [row, value] : column) {

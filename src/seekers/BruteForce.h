@@ -9,13 +9,26 @@
 
 namespace seekers {
 
+struct BruteForceParameters {
+  // If answer size exceeds size_limit pairs, then new pairs will not be added
+  // to it. But algorithm won't stop working.
+  std::optional<size_t> size_limit = std::nullopt;
+
+  std::optional<timing::Deadline> deadline = std::nullopt;
+};
+
 class BruteForce {
   const size_t max_diff;
+  const BruteForceParameters params;
 
   Statistics statistics_;
 
-  static void add_to_result(std::vector<std::pair<size_t, size_t>>& result,
-                            size_t i, size_t j) {
+  void add_to_result(std::vector<std::pair<size_t, size_t>>& result, size_t i,
+                     size_t j) {
+    if (params.size_limit && result.size() >= *params.size_limit) {
+      return;
+    }
+
     if (i > j) {
       std::swap(i, j);
     }
@@ -24,7 +37,8 @@ class BruteForce {
   }
 
  public:
-  explicit BruteForce(size_t max_diff) : max_diff(max_diff) {}
+  explicit BruteForce(size_t max_diff, BruteForceParameters params = {})
+      : max_diff(max_diff), params(params) {}
 
   std::vector<std::pair<size_t, size_t>> seek(const CSCMatrix<double>& matrix) {
     auto [n, d] = matrix.shape();
@@ -63,6 +77,10 @@ class BruteForce {
         if (diff <= max_diff) {
           add_to_result(result, counts[i].first, counts[j].first);
         }
+      }
+
+      if (params.deadline && params.deadline->is_over()) {
+        break;
       }
     }
 

@@ -1,30 +1,26 @@
 #include "Result.h"
 
-#include <unordered_set>
+#include <set>
 
 seekers::SingularResult seekers::normalize_result(const Result& result) {
-  std::unordered_set<std::pair<size_t, size_t>> pairs;
+  std::set<std::pair<size_t, size_t>> pairs;
 
-  for (auto [i, j] : result.singular) {
+  const auto emplace_pair = [&](size_t i, size_t j) {
     if (i > j) {
       pairs.emplace(j, i);
-    } else {
+    } else if (i < j) {
       pairs.emplace(i, j);
     }
+  };
+
+  for (auto [i, j] : result.singular) {
+    emplace_pair(i, j);
   }
 
   for (const auto& [left, right] : result.bipartite) {
     for (size_t i : left) {
       for (size_t j : right) {
-        if (i == j) {
-          continue;
-        }
-
-        if (i > j) {
-          pairs.emplace(j, i);
-        } else {
-          pairs.emplace(i, j);
-        }
+        emplace_pair(i, j);
       }
     }
   }

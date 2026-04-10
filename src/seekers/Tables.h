@@ -179,6 +179,10 @@ class Tables {
   const size_t groups_count;
   const size_t max_small_row_size;
 
+  // stores indices of rows sorted by size (e.g. sorted_[0] is the smallest row)
+  std::vector<size_t> sorted_;
+  size_t big_rows_start_;
+
   Statistics statistics_;
 
   std::vector<SparseVector<double>> transposed_;
@@ -293,26 +297,32 @@ class Tables {
     }
 
     size_t prev = 0;
-    for (auto& [key, value] : classes_sizes) {
-      value += prev;
-      prev = value;
+    for (size_t& value : classes_sizes | std::views::values) {
+      const size_t old = value;
+
+      value = prev;
+      prev += old;
     }
 
     // total count of big rows is stored in prev after previous loop
-    std::vector<size_t> indices(prev);
-    for (size_t i = 0; i < n; ++i) {
+    // use stable sort, so that rows are remain sorted by size inside classes
+    std::vector<size_t> indices = sorted_;
+
+    for (const size_t i : sorted_) {
       if (transposed_[i].size() > max_small_row_size) {
-        indices[--classes_sizes[merged_classes[i]]] = i;
+        indices[classes_sizes[merged_classes[i]]++] = i;
       }
     }
 
-    for (size_t i = 0; i < prev; ++i) {
+    for (size_t i = 0; i < n; ++i) {
       if (transposed_[indices[i]].size() <= max_small_row_size) {
         continue;
       }
 
       for (size_t j = i + 1;
-           j < prev && merged_classes[indices[j]] == merged_classes[indices[i]];
+           j < n && merged_classes[indices[j]] == merged_classes[indices[i]] &&
+           transposed_[indices[j]].size() <=
+               transposed_[indices[i]].size() + max_diff;
            ++j) {
         consider_pair(indices[i], indices[j], front);
       }
@@ -544,6 +554,12 @@ class Tables {
 
     auto [n, d] = matrix.shape();
     transposed_ = matrix.get_transposed();
+
+    sorted_ = std::vector<size_t>(n);
+    std::iota(sorted_.begin(), sorted_.end(), 0);
+
+    std::ranges::sort(sorted_, {},
+                      [&](size_t row) { return transposed_[row].size(); });
 
     //
     auto groups = splitters::GreedySplitter().split(matrix, groups_count);

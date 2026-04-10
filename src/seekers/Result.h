@@ -1,16 +1,14 @@
 #pragma once
 
-#include <unordered_set>
+#include <set>
 #include <vector>
-
-#include "utils/Hashers.h"
 
 namespace seekers {
 
 struct SingularResult {
   std::vector<std::pair<size_t, size_t>> singular;
 
-  std::unordered_set<std::pair<size_t, size_t>> as_set() const {
+  std::set<std::pair<size_t, size_t>> as_set() const {
     return {singular.begin(), singular.end()};
   }
 };

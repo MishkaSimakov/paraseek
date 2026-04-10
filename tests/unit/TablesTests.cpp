@@ -1,7 +1,6 @@
 #include <gtest/gtest.h>
 
 #include <random>
-#include <unordered_set>
 
 #include "helpers/RandomProblem.h"
 #include "problems/ProblemMatrix.h"
@@ -16,16 +15,10 @@ void compare_tables_with_brute_force(const CSCMatrix<double>& matrix,
   auto bf_result = seekers::BruteForce(2).seek(matrix);
   auto tbls_result = seekers::Tables(2, tables_params).seek(matrix);
 
-  auto tbls_normalized = seekers::normalize_result(tbls_result).as_set();
+  auto tbls_set = seekers::normalize_result(tbls_result).as_set();
+  auto bf_set = std::set(bf_result.begin(), bf_result.end());
 
-  for (const auto p : bf_result) {
-    auto itr = tbls_normalized.find(p);
-
-    ASSERT_FALSE(itr == tbls_normalized.end());
-    tbls_normalized.erase(itr);
-  }
-
-  ASSERT_TRUE(tbls_normalized.empty());
+  ASSERT_EQ(tbls_set, bf_set);
 }
 
 TEST(TablesTests, CompareWithBruteForce) {
@@ -83,7 +76,7 @@ TEST(TablesTests, SmallTest2) {
   ASSERT_EQ(normalized.singular.size(), 0);
 }
 
-TEST(TablesTests, RandomizedSmallTest) {
+TEST(TablesTests, RandomizedTest1) {
   constexpr size_t rows_size = 4;
 
   std::default_random_engine engine;
@@ -119,11 +112,29 @@ TEST(TablesTests, RandomizedSmallTest) {
 TEST(TablesTests, RandomizedTest2) {
   std::default_random_engine random;
 
-  for (size_t i = 0; i < 1'000; ++i) {
-    auto problem = generate_random_problem(50, 1000, random);
+  for (size_t i = 0; i < 100'000; ++i) {
+    auto problem = generate_random_problem(5, 10, random);
 
     ASSERT_NO_FATAL_FAILURE(compare_tables_with_brute_force(
         problem.A, {.groups_count = 4, .max_small_row_size = 4}))
-        << problem.A;
+        << linalg::to_dense(problem.A);
   }
 }
+
+TEST(TablesTests, RandomizedTest3) {
+  std::default_random_engine random;
+
+  for (size_t i = 0; i < 1'000; ++i) {
+    auto problem = generate_random_problem(50, 1000, random);
+
+    if (i != 277) {
+      continue;
+    }
+
+    ASSERT_NO_FATAL_FAILURE(compare_tables_with_brute_force(
+        problem.A, {.groups_count = 4, .max_small_row_size = 4}))
+        << linalg::to_dense(problem.A) << " " << i;
+  }
+}
+
+// 13, 35
