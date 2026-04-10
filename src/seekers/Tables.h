@@ -274,26 +274,24 @@ class Tables {
     std::vector<double> front(n, 0);
     std::unordered_map<size_t, size_t> classes_sizes;
 
-    for (size_t i = 0; i < n; ++i) {
-      if (transposed_[i].size() <= max_small_row_size) {
-        continue;
-      }
-
+    for (size_t i = big_rows_start_; i < n; ++i) {
       // TODO: correct seed? RowHasher?
+      const size_t row = sorted_[i];
+
       StreamHasher hasher;
 
       for (size_t group_id = 0; group_id < groups_mask.size(); ++group_id) {
         if (groups_mask[group_id]) {
-          if (front[i] == 0) {
-            front[i] = blocks[i][group_id].front;
+          if (front[row] == 0) {
+            front[row] = blocks[row][group_id].front;
           }
 
-          hasher << blocks[i][group_id].class_id;
+          hasher << blocks[row][group_id].class_id;
         }
       }
 
-      merged_classes[i] = hasher.get_hash();
-      ++classes_sizes[merged_classes[i]];
+      merged_classes[row] = hasher.get_hash();
+      ++classes_sizes[merged_classes[row]];
     }
 
     size_t prev = 0;
@@ -306,21 +304,17 @@ class Tables {
 
     // total count of big rows is stored in prev after previous loop
     // use stable sort, so that rows are remain sorted by size inside classes
-    std::vector<size_t> indices = sorted_;
+    std::vector<size_t> indices(n - big_rows_start_);
 
-    for (const size_t i : sorted_) {
-      if (transposed_[i].size() > max_small_row_size) {
-        indices[classes_sizes[merged_classes[i]]++] = i;
-      }
+    for (size_t i = big_rows_start_; i < n; ++i) {
+      const size_t row = sorted_[i];
+      indices[classes_sizes[merged_classes[row]]++] = row;
     }
 
-    for (size_t i = 0; i < n; ++i) {
-      if (transposed_[indices[i]].size() <= max_small_row_size) {
-        continue;
-      }
-
+    for (size_t i = 0; i < indices.size(); ++i) {
       for (size_t j = i + 1;
-           j < n && merged_classes[indices[j]] == merged_classes[indices[i]] &&
+           j < indices.size() &&
+           merged_classes[indices[j]] == merged_classes[indices[i]] &&
            transposed_[indices[j]].size() <=
                transposed_[indices[i]].size() + max_diff;
            ++j) {
@@ -560,6 +554,15 @@ class Tables {
 
     std::ranges::sort(sorted_, {},
                       [&](size_t row) { return transposed_[row].size(); });
+
+    big_rows_start_ = n;
+
+    for (size_t i = 0; i < n; ++i) {
+      if (transposed_[sorted_[i]].size() > max_small_row_size) {
+        big_rows_start_ = i;
+        break;
+      }
+    }
 
     //
     auto groups = splitters::GreedySplitter().split(matrix, groups_count);

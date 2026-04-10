@@ -19,12 +19,13 @@ int main() {
 
   for (size_t problem_index = 0; problem_index < problems_names.size();
        ++problem_index) {
+    std::println("{}/{}: {}", problem_index + 1, problems_names.size(),
+                 problems_names[problem_index]);
+
     auto problem = get_problem_matrices(problems_names[problem_index], true);
 
     const auto [n, d] = problem.A.shape();
 
-    std::println("{}/{}: {}", problem_index + 1, problems_names.size(),
-                 problems_names[problem_index]);
     std::println("  size: {} x {} (nz = {})", n, d, problem.A.nonzero_count());
 
     // solve using tables
@@ -46,8 +47,7 @@ int main() {
     // std::println(os, "{},{},{}", problems_names[problem_index],
     // tables_duration, bf_duration);
 
-    std::println(os, "{},{},{}", problems_names[problem_index],
-                 tables_duration);
+    std::println(os, "{},{}", problems_names[problem_index], tables_duration);
     os.flush();
 
     // for (size_t i = 0; i < 5; ++i) {
