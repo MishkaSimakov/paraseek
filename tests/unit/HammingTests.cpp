@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
 
+#include "Hamming.h"
 #include "matrix/CSCMatrix.h"
-#include "utils/Hamming.h"
 
 void check_hamming_leq(const SparseVector<double>& left,
                        const SparseVector<double>& right, size_t true_distance,

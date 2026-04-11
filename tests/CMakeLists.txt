@@ -1,5 +1,6 @@
 include(load_google_test.cmake)
 include(load_highs.cmake)
+include(load_boost.cmake)
 
 enable_testing()
 
@@ -11,7 +12,7 @@ target_sources(tests PUBLIC
         unit/ReducerTests.cpp
         unit/HighsTests.cpp
 )
-target_link_libraries(tests PRIVATE GTest::gtest_main paraseek highs)
+target_link_libraries(tests PRIVATE GTest::gtest_main paraseek highs Boost::boost)
 target_include_directories(tests PRIVATE .)
 set_target_properties(tests PROPERTIES CMAKE_CXX_FLAGS "-fsanitize=address")
 

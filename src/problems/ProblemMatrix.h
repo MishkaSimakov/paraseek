@@ -6,8 +6,9 @@
 #include "mps/MPS.h"
 #include "utils/Paths.h"
 
-inline Problem get_problem_matrices(std::string name,
-                                         bool replace_inequalities = false) {
+template <typename Field = double>
+Problem<Field> get_problem(std::string name,
+                           bool replace_inequalities = false) {
   auto archive_path = paths::problem(name + ".mps.gz");
   auto path = paths::problem(name + ".mps");
 
@@ -21,7 +22,7 @@ inline Problem get_problem_matrices(std::string name,
     }
   }
 
-  auto reader = mps::MPSReader<double>(mps::Format::FREE);
+  auto reader = mps::MPSReader<Field>(mps::Format::FREE);
   reader.read(path);
 
   return reader.get_problem(replace_inequalities);

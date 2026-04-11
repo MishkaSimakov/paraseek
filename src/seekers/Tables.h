@@ -8,11 +8,11 @@
 #include <unordered_set>
 #include <vector>
 
+#include "../Hamming.h"
 #include "Result.h"
 #include "matrix/CSCMatrix.h"
 #include "seekers/Statistics.h"
 #include "splitters/GreedySplitter.h"
-#include "utils/Hamming.h"
 #include "utils/Hashers.h"
 #include "utils/Logging.h"
 
@@ -27,22 +27,10 @@ namespace seekers {
 
 static size_t max_map_size = 0;
 
-// TODO: cnt_0 and cnt_1 are small, maybe transform them into uint8_t
-// or even merge into one uint8_t
-// for every entry cnt_0 + cnt_1 <= max_diff
-struct SmallRowEntry {
-  size_t cnt_0 = 0;
-  size_t cnt_1 = 0;
-
-  size_t class_id = 0;
-
-  double front = 0;
-};
-
 class ClassesStorage {
   struct ClassInfo {
     size_t map_column{0};
-    std::unordered_map<int64_t, size_t> map;
+    std::unordered_map<size_t, size_t> map;
     std::vector<size_t> counts;
   };
 
@@ -70,10 +58,6 @@ class ClassesStorage {
     return classes_[class_id].counts[cnt_0 * (max_diff + 1) + cnt_1];
   }
 
-  size_t& get_rows_count(const SmallRowEntry entry) {
-    return get_rows_count(entry.class_id, entry.cnt_0, entry.cnt_1);
-  }
-
   void try_free_class(size_t class_id) {
     bool is_zero = true;
 
@@ -89,7 +73,7 @@ class ClassesStorage {
     }
   }
 
-  size_t get_class(size_t prev_class, int64_t value, size_t column) {
+  size_t get_class(size_t prev_class, size_t hash, size_t column) {
     if (free_classes_.empty()) {
       extend_classes_storage(classes_.size() * 2);
     }
@@ -100,7 +84,7 @@ class ClassesStorage {
     }
 
     auto [itr, inserted] =
-        classes_[prev_class].map.emplace(value, free_classes_.back());
+        classes_[prev_class].map.emplace(hash, free_classes_.back());
 
     if (inserted) {
       free_classes_.pop_back();
@@ -151,11 +135,33 @@ struct TablesParameters {
   size_t max_small_row_size;
 };
 
+// Hashes doubles, but not too precisely
+struct DoubleHasher {
+  size_t operator()(double value) const {
+    return std::hash<double>()(std::round(value * 1e10));
+  }
+};
+
+template <typename Field, typename FieldHasher>
 class Tables {
+  // TODO: cnt_0 and cnt_1 are small, maybe transform them into uint8_t
+  // or even merge into one uint8_t
+  // for every entry cnt_0 + cnt_1 <= max_diff
+  struct SmallRowEntry {
+    size_t cnt_0 = 0;
+    size_t cnt_1 = 0;
+
+    size_t class_id = 0;
+    Field front = 0;
+  };
+
   struct Block {
     size_t class_id;
-    double front;
+    Field front;
   };
+
+  [[no_unique_address]]
+  FieldHasher hasher_;
 
   const size_t max_diff;
   const size_t groups_count;
@@ -167,21 +173,16 @@ class Tables {
 
   Statistics statistics_;
 
-  std::vector<SparseVector<double>> transposed_;
+  std::vector<SparseVector<Field>> transposed_;
 
   std::vector<std::pair<size_t, size_t>> result_singular_;
   std::vector<std::pair<std::vector<size_t>, std::vector<size_t>>>
       result_bipartite_;
 
-  // Prepares double for hashing
-  static int64_t normalize_double(double value) {
-    return std::round(value * 1e10);
-  }
-
   // For each row a list of blocks is returned
-  static std::vector<std::vector<Block>> get_blocks(
-      const CSCMatrix<double>& matrix,
-      const std::vector<std::vector<size_t>>& groups) {
+  std::vector<std::vector<Block>> get_blocks(
+      const CSCMatrix<Field>& matrix,
+      const std::vector<std::vector<size_t>>& groups) const {
     auto [n, d] = matrix.shape();
 
     std::vector<std::vector<Block>> blocks(n);
@@ -189,7 +190,7 @@ class Tables {
       blocks[i].resize(groups.size(), Block{0, 0});
     }
 
-    std::unordered_map<std::pair<size_t, int64_t>, size_t> map;
+    std::unordered_map<std::pair<size_t, size_t>, size_t> map;
 
     for (size_t group_id = 0; group_id < groups.size(); ++group_id) {
       size_t classes_cnt = 1;
@@ -197,17 +198,15 @@ class Tables {
       for (const size_t col : groups[group_id]) {
         map.clear();
 
-        for (auto [row, value] : matrix.get_column(col)) {
+        for (const auto [row, value] : matrix.get_column(col)) {
           if (blocks[row][group_id].front == 0) {
             blocks[row][group_id].front = value;
           }
 
-          auto normalized =
-              normalize_double(value / blocks[row][group_id].front);
+          const size_t hash = hasher_(value / blocks[row][group_id].front);
 
-          auto [itr, new_class] =
-              map.emplace(std::pair{blocks[row][group_id].class_id, normalized},
-                          classes_cnt);
+          auto [itr, new_class] = map.emplace(
+              std::pair{blocks[row][group_id].class_id, hash}, classes_cnt);
 
           if (new_class) {
             ++classes_cnt;
@@ -229,11 +228,11 @@ class Tables {
     }
   }
 
-  void consider_pair(size_t i, size_t j, const std::vector<double>& front) {
+  void consider_pair(size_t i, size_t j, const std::vector<Field>& front) {
     ++statistics_.pairs_considered;
 
     if (front[i] != 0) {
-      double ratio = front[i] / front[j];
+      Field ratio = front[i] / front[j];
 
       if (similarity::hamming_fixed_ratio(transposed_[i], transposed_[j],
                                           ratio) <= max_diff) {
@@ -247,13 +246,13 @@ class Tables {
     }
   }
 
-  void seek_table(const CSCMatrix<double>& matrix,
+  void seek_table(const CSCMatrix<Field>& matrix,
                   const std::vector<bool>& groups_mask,
                   const std::vector<std::vector<Block>>& blocks) {
     auto [n, d] = matrix.shape();
 
     std::vector<size_t> merged_classes(n);
-    std::vector<double> front(n, 0);
+    std::vector<Field> front(n, 0);
     std::unordered_map<size_t, size_t> classes_sizes;
 
     for (size_t i = big_rows_start_; i < n; ++i) {
@@ -368,7 +367,7 @@ class Tables {
     }
   }
 
-  void seek_small(const CSCMatrix<double>& matrix) {
+  void seek_small(const CSCMatrix<Field>& matrix) {
     const auto [n, d] = matrix.shape();
     const size_t max_size = max_small_row_size + max_diff;
 
@@ -447,12 +446,14 @@ class Tables {
           const size_t entries_size = entries.size();
 
           for (size_t i = 0; i < entries_size; ++i) {
-            --classes.get_rows_count(entries[i]);
+            --classes.get_rows_count(entries[i].class_id, entries[i].cnt_0,
+                                     entries[i].cnt_1);
             ++entries[i].cnt_0;
 
             // otherwise this entry will be removed later
             if (entries[i].cnt_0 + entries[i].cnt_1 <= max_diff) {
-              ++classes.get_rows_count(entries[i]);
+              ++classes.get_rows_count(entries[i].class_id, entries[i].cnt_0,
+                                       entries[i].cnt_1);
             }
           }
 
@@ -470,7 +471,8 @@ class Tables {
         const size_t entries_size = entries.size();
 
         for (size_t i = 0; i < entries_size; ++i) {
-          --classes.get_rows_count(entries[i]);
+          --classes.get_rows_count(entries[i].class_id, entries[i].cnt_0,
+                                   entries[i].cnt_1);
 
           if (entries[i].cnt_0 + entries[i].cnt_1 < max_diff) {
             // class 0 (create new entry)
@@ -479,7 +481,8 @@ class Tables {
               ++new_entry.cnt_0;
 
               entries.push_back(new_entry);
-              ++classes.get_rows_count(new_entry);
+              ++classes.get_rows_count(new_entry.class_id, new_entry.cnt_0,
+                                       new_entry.cnt_1);
             }
           }
 
@@ -500,7 +503,8 @@ class Tables {
                   classes.get_class(entries[i].class_id, 0, col);
 
               entries.push_back(new_entry);
-              ++classes.get_rows_count(new_entry);
+              ++classes.get_rows_count(new_entry.class_id, new_entry.cnt_0,
+                                       new_entry.cnt_1);
             }
           }
 
@@ -510,10 +514,11 @@ class Tables {
               entries[i].front = value;
             }
 
-            auto normalized = normalize_double(value / entries[i].front);
+            const size_t hash = hasher_(value / entries[i].front);
             entries[i].class_id =
-                classes.get_class(entries[i].class_id, normalized, col);
-            ++classes.get_rows_count(entries[i]);
+                classes.get_class(entries[i].class_id, hash, col);
+            ++classes.get_rows_count(entries[i].class_id, entries[i].cnt_0,
+                                     entries[i].cnt_1);
           }
         }
       }
@@ -531,7 +536,7 @@ class Tables {
           }
 
           // the entry has unique class => it is removed
-          --classes.get_rows_count(entry);
+          --classes.get_rows_count(entry.class_id, entry.cnt_0, entry.cnt_1);
           classes.try_free_class(entry.class_id);
 
           return true;
@@ -553,8 +558,8 @@ class Tables {
 
     for (size_t row = 0; row < n; ++row) {
       for (const auto entry : rows[row]) {
-        m[entry.cnt_0][entry.cnt_1][--classes.get_rows_count(entry)] = {
-            entry.class_id, row};
+        m[entry.cnt_0][entry.cnt_1][--classes.get_rows_count(
+            entry.class_id, entry.cnt_0, entry.cnt_1)] = {entry.class_id, row};
       }
     }
 
@@ -582,7 +587,7 @@ class Tables {
       : Tables(max_diff, {.groups_count = max_diff * 2,
                           .max_small_row_size = max_diff * 2}) {}
 
-  Result seek(const CSCMatrix<double>& matrix) {
+  Result seek(const CSCMatrix<Field>& matrix) {
     const size_t selected_groups_count = groups_count - max_diff;
 
     auto [n, d] = matrix.shape();
@@ -604,7 +609,8 @@ class Tables {
     }
 
     //
-    auto groups = splitters::GreedySplitter().split(matrix, groups_count);
+    auto groups =
+        splitters::GreedySplitter<Field>().split(matrix, groups_count);
 
     auto blocks = get_blocks(matrix, groups);
 

@@ -2,10 +2,10 @@
 
 #include <format>
 #include <optional>
-#include <string>
 #include <sstream>
+#include <string>
 
-#include "matrix/FieldTraits.h"
+#include "../FieldTraits.h"
 
 enum class BoundViolationType {
   VIOLATE_UPPER_BOUND,

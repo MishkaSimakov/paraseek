@@ -9,7 +9,8 @@
 #include "helpers/RandomProblem.h"
 #include "problems/Problem.h"
 
-void check_feasible(const Problem& problem, const std::vector<double>& x) {
+template<typename Field>
+void check_feasible(const Problem<Field>& problem, const std::vector<double>& x) {
   const auto [n, d] = problem.A.shape();
 
   ASSERT_EQ(x.size(), d);
@@ -23,12 +24,13 @@ void check_feasible(const Problem& problem, const std::vector<double>& x) {
   }
 
   for (size_t row = 0; row < n; ++row) {
-    ASSERT_NEAR(real[row], problem.b[row], 1e-6);
+    ASSERT_NEAR(real[row], static_cast<double>(problem.b[row]), 1e-6);
   }
 }
 
+template<typename Field>
 void assert_reducer_correct(
-    const Problem& problem,
+    const Problem<Field>& problem,
     const std::vector<std::pair<size_t, size_t>>& rows) {
   const auto [n, d] = problem.A.shape();
 
@@ -151,8 +153,8 @@ TEST(ReducerTests, test_random_small) {
   }
 
   for (size_t i = 0; i < 10'000; ++i) {
-    auto problem = generate_random_problem(rows_count, 5, random);
-    
+    auto problem = generate_random_problem<double>(rows_count, 5, random);
+
     ASSERT_NO_FATAL_FAILURE(assert_reducer_correct(problem, rows));
   }
 }
@@ -171,7 +173,7 @@ TEST(ReducerTests, test_random_big) {
   }
 
   for (size_t i = 0; i < 100; ++i) {
-    auto problem = generate_random_problem(rows_count, 1000, random);
+    auto problem = generate_random_problem<double>(rows_count, 1000, random);
 
     ASSERT_NO_FATAL_FAILURE(assert_reducer_correct(problem, rows));
   }

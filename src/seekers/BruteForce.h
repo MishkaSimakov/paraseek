@@ -3,9 +3,9 @@
 #include <algorithm>
 #include <vector>
 
+#include "../Hamming.h"
 #include "matrix/CSCMatrix.h"
 #include "seekers/Statistics.h"
-#include "utils/Hamming.h"
 
 namespace seekers {
 
@@ -17,6 +17,7 @@ struct BruteForceParameters {
   std::optional<timing::Deadline> deadline = std::nullopt;
 };
 
+template <typename Field>
 class BruteForce {
   const size_t max_diff;
   const BruteForceParameters params;
@@ -40,7 +41,7 @@ class BruteForce {
   explicit BruteForce(size_t max_diff, BruteForceParameters params = {})
       : max_diff(max_diff), params(params) {}
 
-  std::vector<std::pair<size_t, size_t>> seek(const CSCMatrix<double>& matrix) {
+  std::vector<std::pair<size_t, size_t>> seek(const CSCMatrix<Field>& matrix) {
     auto [n, d] = matrix.shape();
 
     std::vector<std::pair<size_t, size_t>> result;
@@ -58,21 +59,16 @@ class BruteForce {
     std::ranges::sort(counts, {}, [](auto p) { return p.second; });
 
     // precalculate transposed matrix
-    std::vector<SparseVector<double>> rows(n);
-    for (size_t col = 0; col < d; ++col) {
-      for (auto [row, value] : matrix.get_column(col)) {
-        rows[row].emplace_back(col, value);
-      }
-    }
+    const auto transposed = matrix.get_transposed();
 
     for (size_t i = 0; i < n; ++i) {
       for (size_t j = i + 1;
            j < n && counts[j].second <= counts[i].second + max_diff; ++j) {
         ++statistics_.pairs_considered;
 
-        const size_t diff =
-            similarity::hamming(rows[counts[i].first], rows[counts[j].first])
-                .first;
+        const size_t diff = similarity::hamming(transposed[counts[i].first],
+                                                transposed[counts[j].first])
+                                .first;
 
         if (diff <= max_diff) {
           add_to_result(result, counts[i].first, counts[j].first);

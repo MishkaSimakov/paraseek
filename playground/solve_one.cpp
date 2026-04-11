@@ -13,7 +13,7 @@ int main() {
   const auto problem_name = "problem1";
   std::println("{}", problem_name);
 
-  auto problem = get_problem_matrices(problem_name, true);
+  auto problem = get_problem(problem_name, true);
 
   seekers::TablesParameters params{
       .groups_count = 4,
@@ -26,7 +26,7 @@ int main() {
     std::println("  size: {} x {} (nz = {})", n, d,
                  problem.A.nonzero_count());
 
-    auto seeker = seekers::Tables(2, params);
+    auto seeker = seekers::Tables<double, seekers::DoubleHasher>(2, params);
     auto result = seeker.seek(problem.A);
 
     std::println("  done!");

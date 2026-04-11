@@ -23,11 +23,11 @@ int main() {
 
     std::println("{}/{}: {}", i + 1, problems_names.size(), problem_name);
 
-    auto matrix = get_problem_matrix(problem_name, true);
+    auto matrix = get_problem(problem_name, true).A;
     std::println("  size: {} x {} (nz = {})", matrix.shape().first,
                  matrix.shape().second, matrix.nonzero_count());
 
-    auto result = splitters::GreedySplitter().split(matrix, 4);
+    auto result = splitters::GreedySplitter<double>().split(matrix, 4);
     auto evaluation = splitters::evaluate(matrix, result, 2);
 
     if (!evaluation.is_valid) {
@@ -69,7 +69,7 @@ int main() {
     }
 
     {
-      auto result = splitters::GreedySplitter().split(matrix2, 4);
+      auto result = splitters::GreedySplitter<double>().split(matrix2, 4);
       auto evaluation = splitters::evaluate(matrix2, result, 2);
 
       if (!evaluation.is_valid) {

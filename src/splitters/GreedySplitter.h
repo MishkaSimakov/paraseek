@@ -4,11 +4,12 @@
 
 namespace splitters {
 
+template <typename Field>
 class GreedySplitter {
  public:
   GreedySplitter() = default;
 
-  std::vector<std::vector<size_t>> split(const CSCMatrix<double>& matrix,
+  std::vector<std::vector<size_t>> split(const CSCMatrix<Field>& matrix,
                                          size_t groups_count) {
     const auto [n, d] = matrix.shape();
 
@@ -38,7 +39,11 @@ class GreedySplitter {
         size_t group_id = (i + shift) % groups_count;
 
         if (increment_per_group[group_id] >
-            increment_per_group[max_increment_group] || increment_per_group[group_id] == increment_per_group[max_increment_group] && groups_total_zeros[group_id] > groups_total_zeros[max_increment_group]) {
+                increment_per_group[max_increment_group] ||
+            increment_per_group[group_id] ==
+                    increment_per_group[max_increment_group] &&
+                groups_total_zeros[group_id] >
+                    groups_total_zeros[max_increment_group]) {
           max_increment_group = group_id;
         }
       }

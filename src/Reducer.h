@@ -7,11 +7,11 @@
 
 #include "DisjointSet.h"
 #include "ExpressionDisjointSet.h"
+#include "Hamming.h"
 #include "matrix/CSCMatrix.h"
 #include "problems/Bound.h"
 #include "problems/Problem.h"
 #include "seekers/Result.h"
-#include "utils/Hamming.h"
 #include "utils/Hashers.h"
 #include "utils/ZipRows.h"
 
@@ -64,8 +64,8 @@ class Reducer {
   Reducer() = default;
 
   // Returns new problem and expression of old variables in terms of new ones.
-  std::pair<Problem, std::vector<VariableExpression>> apply(
-      const Problem& problem,
+  std::pair<Problem<double>, std::vector<VariableExpression>> apply(
+      const Problem<double>& problem,
       const std::vector<std::pair<size_t, size_t>>& rows) {
     const auto [n, d] = problem.A.shape();
 
@@ -141,7 +141,7 @@ class Reducer {
 
     // classes_enumeration.size() - 1 because of the constant variables class
     auto result =
-        Problem::with_size(saved_rows_count, classes_enumeration.size() - 1);
+        Problem<double>::with_size(saved_rows_count, classes_enumeration.size() - 1);
     result.shift = problem.shift;
 
     // TODO: here problem may be proven to be unfeasible?

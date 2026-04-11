@@ -22,7 +22,7 @@ int main() {
     std::println("{}/{}: {}", problem_index + 1, problems_names.size(),
                  problems_names[problem_index]);
 
-    auto problem = get_problem_matrices(problems_names[problem_index], true);
+    auto problem = get_problem(problems_names[problem_index], true);
 
     const auto [n, d] = problem.A.shape();
 
@@ -34,8 +34,10 @@ int main() {
         .max_small_row_size = 8,
     };
 
-    const auto tables_duration = timing::timeit(
-        [&] { seekers::Tables(2, tables_params).seek(problem.A); });
+    const auto tables_duration = timing::timeit([&] {
+      seekers::Tables<double, seekers::DoubleHasher>(2, tables_params)
+          .seek(problem.A);
+    });
 
     // solve using brute force
     // seekers::BruteForceParameters bf_params{

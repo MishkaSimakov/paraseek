@@ -6,10 +6,11 @@
 #include "utils/Random.h"
 
 // If feasible = false, then returned problem may not be feasible.
-template <typename Gen>
-  requires std::uniform_random_bit_generator<std::remove_reference_t<Gen>>
-Problem generate_random_problem(size_t n, size_t d, Gen&& generator,
-                                bool feasible = true) {
+template <typename Field, typename Gen>
+  requires(std::uniform_random_bit_generator<std::remove_reference_t<Gen>> &&
+           std::convertible_to<double, Field>)
+Problem<Field> generate_random_problem(size_t n, size_t d, Gen&& generator,
+                                       bool feasible = true) {
   std::uniform_real_distribution<double> alpha_dist(0.1, 10);
   std::uniform_real_distribution<double> value_dist(-5.0, 5.0);
   std::uniform_real_distribution<double> prob(0.0, 1.0);
@@ -21,7 +22,7 @@ Problem generate_random_problem(size_t n, size_t d, Gen&& generator,
   }
 
   // --- Generate sparse A ---
-  Matrix<double> dense(n, d);
+  Matrix<Field> dense(n, d);
 
   size_t base_rows = std::max(1uz, n / 2);
 
@@ -55,10 +56,10 @@ Problem generate_random_problem(size_t n, size_t d, Gen&& generator,
     }
   }
 
-  CSCMatrix<double> A(dense);
+  CSCMatrix<Field> A(dense);
 
   // --- Compute b = A * x_true ---
-  std::vector<double> b(n, 0.0);
+  std::vector<Field> b(n, 0.0);
 
   for (size_t col = 0; col < d; ++col) {
     for (auto [row, value] : A.get_column(col)) {
@@ -75,13 +76,13 @@ Problem generate_random_problem(size_t n, size_t d, Gen&& generator,
   }
 
   // --- Random objective ---
-  std::vector<double> c(d);
+  std::vector<Field> c(d);
   for (size_t j = 0; j < d; ++j) {
     c[j] = value_dist(generator);
   }
 
   // --- Bounds (loose but valid) ---
-  std::vector<Bound<double>> bounds(d);
+  std::vector<Bound<Field>> bounds(d);
 
   std::uniform_real_distribution<double> bounds_dist(-10., 10.);
 

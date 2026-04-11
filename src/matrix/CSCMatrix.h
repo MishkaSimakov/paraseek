@@ -6,7 +6,7 @@
 #include <sstream>
 #include <vector>
 
-#include "FieldTraits.h"
+#include "../FieldTraits.h"
 #include "Matrix.h"
 
 template <typename Field>

@@ -254,7 +254,7 @@ class MPSReader {
   }
 
   // TODO: support for ranges
-  Problem get_problem(bool replace_inequalities) const {
+  Problem<Field> get_problem(bool replace_inequalities) const {
     std::unordered_map<std::string, size_t> rows_enumeration;
     rows_enumeration.reserve(rows_.size());
 
@@ -265,14 +265,14 @@ class MPSReader {
     }
 
     CSCMatrix<Field> A(rows_enumeration.size());
-    std::vector<double> c(variables_.size(), 0);
-    std::vector<Bound<double>> bounds(variables_.size());
+    std::vector<Field> c(variables_.size(), 0);
+    std::vector<Bound<Field>> bounds(variables_.size());
 
     size_t i = 0;
     for (const auto& [_, info] : variables_) {
       A.add_column();
 
-      for (auto [row_name, coef] : info.rows) {
+      for (const auto& [row_name, coef] : info.rows) {
         const auto& row = rows_.at(row_name);
 
         if (row.type == RowType::OBJECTIVE) {
@@ -295,7 +295,7 @@ class MPSReader {
         const size_t index = rows_enumeration.at(name);
 
         c.push_back(0);
-        bounds.push_back(Bound<double>(0, std::nullopt));
+        bounds.push_back(Bound<Field>(0, std::nullopt));
 
         if (row.type == RowType::LESS_THAN) {
           A.add_column();
@@ -308,7 +308,7 @@ class MPSReader {
     }
 
     // rhs column
-    std::vector<double> b(rows_enumeration.size());
+    std::vector<Field> b(rows_enumeration.size());
 
     for (const auto& [name, row] : rows_) {
       if (row.type == RowType::OBJECTIVE) {

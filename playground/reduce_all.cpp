@@ -9,7 +9,6 @@
 #include "problems/ProblemsNames.h"
 #include "seekers/BruteForce.h"
 #include "seekers/Tables.h"
-#include "seekers/TablesSimpleHashing.h"
 #include "utils/Printing.h"
 
 using namespace std::chrono_literals;
@@ -23,7 +22,7 @@ int main() {
     std::println("{}/{}: {}", problem_index + 1, problems_names.size(),
                  problems_names[problem_index]);
 
-    auto problem = get_problem_matrices(problems_names[problem_index], true);
+    auto problem = get_problem(problems_names[problem_index], true);
 
     seekers::TablesParameters params{
         .groups_count = 4,
@@ -37,7 +36,7 @@ int main() {
       std::println("  size: {} x {} (nz = {})", n, d,
                    problem.A.nonzero_count());
 
-      auto seeker = seekers::Tables(2, params);
+      auto seeker = seekers::Tables<double, seekers::DoubleHasher>(2, params);
       auto result = seeker.seek(problem.A);
 
       std::println("  done!");

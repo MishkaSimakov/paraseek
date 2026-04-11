@@ -12,7 +12,8 @@ struct Solution {
   double objective;
 };
 
-inline HighsLp to_highs(const Problem& problem) {
+template <std::convertible_to<double> Field>
+HighsLp to_highs(const Problem<Field>& problem) {
   const auto [n, d] = problem.A.shape();
 
   HighsLp lp;
@@ -20,23 +21,40 @@ inline HighsLp to_highs(const Problem& problem) {
   lp.num_row_ = static_cast<int>(n);
 
   // Objective
-  lp.col_cost_ = problem.c;
+  lp.col_cost_.resize(d);
+  for (size_t i = 0; i < d; ++i) {
+    lp.col_cost_[i] = static_cast<double>(problem.c[i]);
+  }
 
   // Bounds
   std::vector<double> lower(d);
   std::vector<double> upper(d);
 
   for (size_t i = 0; i < d; ++i) {
-    lower[i] = problem.bounds[i].lower.value_or(-kHighsInf);
-    upper[i] = problem.bounds[i].upper.value_or(kHighsInf);
+    lower[i] =
+        problem.bounds[i]
+            .lower
+            .transform([](Field value) { return static_cast<double>(value); })
+            .value_or(-kHighsInf);
+
+    upper[i] =
+        problem.bounds[i]
+            .upper
+            .transform([](Field value) { return static_cast<double>(value); })
+            .value_or(kHighsInf);
   }
 
   lp.col_lower_ = std::move(lower);
   lp.col_upper_ = std::move(upper);
 
   // Matrix
-  lp.row_lower_ = problem.b;
-  lp.row_upper_ = problem.b;
+  lp.row_lower_.resize(n);
+  lp.row_upper_.resize(n);
+
+  for (size_t row = 0; row < n; ++row) {
+    lp.row_lower_[row] = lp.row_upper_[row] =
+        static_cast<double>(problem.b[row]);
+  }
 
   lp.a_matrix_.start_.resize(d + 1);
   lp.a_matrix_.index_.clear();
@@ -48,7 +66,7 @@ inline HighsLp to_highs(const Problem& problem) {
   for (size_t col = 0; col < d; ++col) {
     for (auto [row, value] : problem.A.get_column(col)) {
       lp.a_matrix_.index_.push_back(static_cast<int>(row));
-      lp.a_matrix_.value_.push_back(value);
+      lp.a_matrix_.value_.push_back(static_cast<double>(value));
       ++nnz;
     }
 
@@ -58,7 +76,8 @@ inline HighsLp to_highs(const Problem& problem) {
   return lp;
 }
 
-inline Solution solve(const Problem& problem) {
+template <std::convertible_to<double> Field>
+Solution solve(const Problem<Field>& problem) {
   if (problem.proven_unfeasible) {
     return {
         .status = HighsModelStatus::kInfeasible,

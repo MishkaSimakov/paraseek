@@ -5,7 +5,7 @@
 #include <sstream>
 #include <vector>
 
-#include "FieldTraits.h"
+#include "../FieldTraits.h"
 #include "Types.h"
 
 template <typename Field>
