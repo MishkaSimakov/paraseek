@@ -9,6 +9,7 @@
 #include "problems/ProblemsNames.h"
 #include "seekers/BruteForce.h"
 #include "seekers/Tables.h"
+#include "seekers/TablesSimpleHashing.h"
 #include "utils/Printing.h"
 
 using namespace std::chrono_literals;
@@ -34,8 +35,9 @@ int main() {
         .max_small_row_size = 8,
     };
 
-    const auto tables_duration = timing::timeit(
-        [&] { seekers::Tables(2, tables_params).seek(problem.A); });
+    const auto tables_duration = timing::timeit([&] {
+      seekers::Tables(2, tables_params).seek(problem.A);
+    });
 
     // solve using brute force
     // seekers::BruteForceParameters bf_params{
@@ -49,36 +51,5 @@ int main() {
 
     std::println(os, "{},{}", problems_names[problem_index], tables_duration);
     os.flush();
-
-    // for (size_t i = 0; i < 5; ++i) {
-    //   const auto [n, d] = problem.A.shape();
-    //
-    //   std::println("{}/{}: {}", problem_index + 1, problems_names.size(),
-    //                problems_names[problem_index]);
-    //   std::println("  size: {} x {} (nz = {})", n, d,
-    //                problem.A.nonzero_count());
-    //
-    // seekers::TablesParameters params{
-    //     .groups_count = 4,
-    //     .max_small_row_size = 8,
-    // };
-    //
-    //   auto seeker = seekers::Tables(2, params);
-    //   auto result = seeker.seek(problem.A);
-    //
-    //   std::println("  done!");
-    //
-    //   auto for_reducer = result_for_reducer(result);
-    //   std::println("  size = {}", for_reducer.size());
-    //
-    //   auto [new_problem, mapping] = Reducer().apply(problem, for_reducer);
-    //
-    //   std::println("  {} x {} -> {} x {}", problem.A.shape().first,
-    //                problem.A.shape().second, new_problem.A.shape().first,
-    //                new_problem.A.shape().second);
-    //
-    //   std::println("  ----------------------");
-    //   problem = std::move(new_problem);
-    // }
   }
 }

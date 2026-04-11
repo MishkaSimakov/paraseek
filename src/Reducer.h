@@ -78,6 +78,10 @@ class Reducer {
     auto rows_ds = DisjointSet(n);
 
     for (const auto [i, j] : rows) {
+      if (i == j) {
+        continue;
+      }
+
       auto ratio = similarity::hamming_leq(transposed[i], transposed[j], 2);
 
       if (!ratio) {

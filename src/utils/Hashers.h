@@ -85,3 +85,26 @@ struct StreamUnorderedHasher {
     return tuple_hasher_fn(values_sum_, values_xor_, values_mul_);
   }
 };
+
+
+// https://stackoverflow.com/questions/20511347/a-good-hash-function-for-a-vector/72073933
+class RowHasher {
+  uint32_t hash_;
+
+public:
+  explicit RowHasher(uint32_t seed) : hash_(seed) {}
+
+  template <typename T>
+  RowHasher& operator<<(T value) {
+    uint32_t x = std::hash<T>()(value);
+
+    x = ((x >> 16) ^ x) * 0x45d9f3b;
+    x = ((x >> 16) ^ x) * 0x45d9f3b;
+    x = (x >> 16) ^ x;
+    hash_ ^= x + 0x9e3779b9 + (hash_ << 6) + (hash_ >> 2);
+
+    return *this;
+  }
+
+  uint32_t get_hash() const { return hash_; }
+};

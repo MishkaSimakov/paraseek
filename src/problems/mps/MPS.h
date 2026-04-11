@@ -266,6 +266,7 @@ class MPSReader {
 
     CSCMatrix<Field> A(rows_enumeration.size());
     std::vector<double> c(variables_.size(), 0);
+    std::vector<Bound<double>> bounds(variables_.size());
 
     size_t i = 0;
     for (const auto& [_, info] : variables_) {
@@ -287,11 +288,14 @@ class MPSReader {
 
     if (replace_inequalities) {
       for (const auto& [name, row] : rows_) {
-        if (row.type == RowType::OBJECTIVE) {
+        if (row.type == RowType::OBJECTIVE || row.type == RowType::EQUAL) {
           continue;
         }
 
         const size_t index = rows_enumeration.at(name);
+
+        c.push_back(0);
+        bounds.push_back(Bound<double>(0, std::nullopt));
 
         if (row.type == RowType::LESS_THAN) {
           A.add_column();
@@ -314,10 +318,6 @@ class MPSReader {
       const size_t index = rows_enumeration.at(name);
       b[index] = row.rhs;
     }
-
-    // bounds
-    // TODO: ...
-    std::vector<Bound<double>> bounds(variables_.size());
 
     return {A, b, c, bounds};
   }

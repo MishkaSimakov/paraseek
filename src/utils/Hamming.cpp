@@ -110,21 +110,24 @@ std::optional<double> similarity::hamming_leq(const SparseVector<double>& x,
 
   std::array<std::pair<double, size_t>, kRatiosCapacity> ratios;
   ratios.fill({0, 0});
-  size_t xor_diff = 0;
+  size_t xor_size = 0;
+  size_t intersection_size = 0;
 
   for (auto [i, x, y] : SparseZipRange{x, y}) {
     if (!FieldTraits<double>::is_nonzero(x) ||
         !FieldTraits<double>::is_nonzero(y)) {
-      ++xor_diff;
+      ++xor_size;
 
-      if (xor_diff > max_distance) {
+      if (xor_size > max_distance) {
         return std::nullopt;
       }
     } else {
+      ++intersection_size;
+
       const double ratio = x / y;
       bool found_slot = false;
 
-      for (size_t j = 0; j <= max_distance - xor_diff; ++j) {
+      for (size_t j = 0; j <= max_distance - xor_size; ++j) {
         if (!FieldTraits<double>::is_nonzero(ratios[j].first)) {
           ratios[j].first = ratio;
           ratios[j].second = 1;
@@ -146,21 +149,17 @@ std::optional<double> similarity::hamming_leq(const SparseVector<double>& x,
     }
   }
 
-  size_t total_count = 0;
-
   size_t max_count = 0;
   double max_count_ratio = 1;
 
-  for (size_t i = 0; i <= max_distance - xor_diff; ++i) {
-    total_count += ratios[i].second;
-
+  for (size_t i = 0; i <= max_distance - xor_size; ++i) {
     if (max_count < ratios[i].second) {
       max_count_ratio = ratios[i].first;
       max_count = ratios[i].second;
     }
   }
 
-  if (xor_diff + total_count - max_count > max_distance) {
+  if (xor_size + intersection_size - max_count > max_distance) {
     return std::nullopt;
   }
 

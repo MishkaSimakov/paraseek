@@ -11,23 +11,52 @@
 #include "utils/Printing.h"
 
 void compare_tables_with_brute_force(const CSCMatrix<double>& matrix,
+                                     size_t max_diff,
                                      seekers::TablesParameters tables_params) {
-  auto bf_result = seekers::BruteForce(2).seek(matrix);
-  auto tbls_result = seekers::Tables(2, tables_params).seek(matrix);
+  auto bf_result = seekers::BruteForce(max_diff).seek(matrix);
+  auto tbls_result = seekers::Tables(max_diff, tables_params).seek(matrix);
 
   auto tbls_set = seekers::normalize_result(tbls_result).as_set();
   auto bf_set = std::set(bf_result.begin(), bf_result.end());
 
+  // for (auto [i, j] : tbls_set) {
+  //   if (similarity::hamming(matrix.get_row(i), matrix.get_row(j)).first > max_diff) {
+  //     std::println("error!");
+  //     similarity::hamming_leq(matrix.get_row(i), matrix.get_row(j), 3);
+  //     similarity::hamming(matrix.get_row(i), matrix.get_row(j));
+  //   }
+  // }
+
   ASSERT_EQ(tbls_set, bf_set);
 }
 
-TEST(TablesTests, CompareWithBruteForce) {
+TEST(TablesTests, CompareWithBruteForce1) {
   for (size_t i = 0; i < 100 && i < problems_names.size(); ++i) {
     SCOPED_TRACE(std::format("problem name: {}", problems_names[i]));
 
     auto matrix = get_problem_matrices(problems_names[i]).A;
     ASSERT_NO_FATAL_FAILURE(compare_tables_with_brute_force(
-        matrix, {.groups_count = 4, .max_small_row_size = 4}));
+        matrix, 1, {.groups_count = 2, .max_small_row_size = 4}));
+  }
+}
+
+TEST(TablesTests, CompareWithBruteForce2) {
+  for (size_t i = 0; i < 100 && i < problems_names.size(); ++i) {
+    SCOPED_TRACE(std::format("problem name: {}", problems_names[i]));
+
+    auto matrix = get_problem_matrices(problems_names[i]).A;
+    ASSERT_NO_FATAL_FAILURE(compare_tables_with_brute_force(
+        matrix, 2, {.groups_count = 4, .max_small_row_size = 4}));
+  }
+}
+
+TEST(TablesTests, CompareWithBruteForce3) {
+  for (size_t i = 0; i < 100 && i < problems_names.size(); ++i) {
+    SCOPED_TRACE(std::format("problem name: {}", problems_names[i]));
+
+    auto matrix = get_problem_matrices(problems_names[i]).A;
+    ASSERT_NO_FATAL_FAILURE(compare_tables_with_brute_force(
+        matrix, 3, {.groups_count = 6, .max_small_row_size = 6}));
   }
 }
 
@@ -42,7 +71,7 @@ TEST(TablesTests, CompareWithBruteForceAllRowsSmall) {
         .max_small_row_size = matrix.shape().second,
     };
 
-    ASSERT_NO_FATAL_FAILURE(compare_tables_with_brute_force(matrix, params));
+    ASSERT_NO_FATAL_FAILURE(compare_tables_with_brute_force(matrix, 2, params));
   }
 }
 
@@ -116,7 +145,7 @@ TEST(TablesTests, RandomizedTest2) {
     auto problem = generate_random_problem(5, 10, random);
 
     ASSERT_NO_FATAL_FAILURE(compare_tables_with_brute_force(
-        problem.A, {.groups_count = 4, .max_small_row_size = 4}))
+        problem.A, 2, {.groups_count = 4, .max_small_row_size = 4}))
         << linalg::to_dense(problem.A);
   }
 }
@@ -132,7 +161,7 @@ TEST(TablesTests, RandomizedTest3) {
     }
 
     ASSERT_NO_FATAL_FAILURE(compare_tables_with_brute_force(
-        problem.A, {.groups_count = 4, .max_small_row_size = 4}))
+        problem.A, 2, {.groups_count = 4, .max_small_row_size = 4}))
         << linalg::to_dense(problem.A) << " " << i;
   }
 }
