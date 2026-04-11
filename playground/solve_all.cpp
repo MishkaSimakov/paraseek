@@ -9,7 +9,6 @@
 #include "problems/ProblemsNames.h"
 #include "seekers/BruteForce.h"
 #include "seekers/Tables.h"
-#include "seekers/TablesSimpleHashing.h"
 #include "utils/Printing.h"
 
 using namespace std::chrono_literals;
@@ -35,9 +34,8 @@ int main() {
         .max_small_row_size = 8,
     };
 
-    const auto tables_duration = timing::timeit([&] {
-      seekers::Tables(2, tables_params).seek(problem.A);
-    });
+    const auto tables_duration = timing::timeit(
+        [&] { seekers::Tables(2, tables_params).seek(problem.A); });
 
     // solve using brute force
     // seekers::BruteForceParameters bf_params{

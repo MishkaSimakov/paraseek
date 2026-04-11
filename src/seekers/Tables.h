@@ -146,28 +146,6 @@ class ClassesStorage {
   }
 };
 
-// https://stackoverflow.com/questions/20511347/a-good-hash-function-for-a-vector/72073933
-class RowHasher {
-  uint32_t hash_;
-
- public:
-  explicit RowHasher(uint32_t seed) : hash_(seed) {}
-
-  template <typename T>
-  RowHasher& operator<<(T value) {
-    uint32_t x = std::hash<T>()(value);
-
-    x = ((x >> 16) ^ x) * 0x45d9f3b;
-    x = ((x >> 16) ^ x) * 0x45d9f3b;
-    x = (x >> 16) ^ x;
-    hash_ ^= x + 0x9e3779b9 + (hash_ << 6) + (hash_ >> 2);
-
-    return *this;
-  }
-
-  uint32_t get_hash() const { return hash_; }
-};
-
 struct TablesParameters {
   size_t groups_count;
   size_t max_small_row_size;
@@ -366,6 +344,12 @@ class Tables {
         continue;
       }
 
+      if (&left == &right && left_end - left_begin == 1 &&
+          right_end - right_begin == 1) {
+        left_begin = left_end;
+        continue;
+      }
+
       std::vector<size_t> left_elements(left_end - left_begin);
       std::vector<size_t> right_elements(right_end - right_begin);
 
@@ -423,12 +407,31 @@ class Tables {
     for (const size_t col : columns_order) {
       const size_t column_size = matrix.get_column(col).size();
 
-      if (column_size <= 1) {
+      size_t col_small_rows = 0;
+      for (const auto [row, value] : matrix.get_column(col)) {
+        if (transposed_[row].size() <= max_size) {
+          ++col_small_rows;
+        }
+      }
+
+      // TODO: for small problems, 1 is optimal (and big loop can be removed)
+      // for big problems, 2-3 looks optimal
+      // maybe should add a compile-time parameter
+      if (col_small_rows <= 2) {
         // compare and add rows manually
         for (size_t i = 0; i < column_size; ++i) {
+          const size_t row1 = matrix.get_column(col)[i].first;
+
+          if (transposed_[row1].size() > max_size) {
+            continue;
+          }
+
           for (size_t j = i + 1; j < column_size; ++j) {
-            const size_t row1 = matrix.get_column(col)[i].first;
             const size_t row2 = matrix.get_column(col)[j].first;
+
+            if (transposed_[row2].size() > max_size) {
+              continue;
+            }
 
             if (similarity::hamming_leq(transposed_[row1], transposed_[row2],
                                         max_diff)) {
@@ -462,10 +465,6 @@ class Tables {
       }
 
       for (auto [row, value] : matrix.get_column(col)) {
-        if (transposed_[row].size() > max_size) {
-          continue;
-        }
-
         auto& entries = rows[row];
         // DO NOT REMOVE THIS: entries.size() does change during loop execution
         const size_t entries_size = entries.size();
@@ -520,37 +519,23 @@ class Tables {
       }
 
       for (auto [row, value] : matrix.get_column(col)) {
-        if (transposed_[row].size() > max_size) {
-          continue;
-        }
-
-        auto& entries = rows[row];
-        std::vector<SmallRowEntry> new_entries;
-
-        for (auto& entry : entries) {
-          bool is_unique = true;
-
+        std::erase_if(rows[row], [&](const SmallRowEntry& entry) {
           for (size_t i = 0; entry.cnt_0 + entry.cnt_1 + i <= max_diff; ++i) {
             const size_t count =
                 classes.get_rows_count(entry.class_id, i, entry.cnt_1);
 
             if ((i != entry.cnt_0 && count > 0) ||
                 (i == entry.cnt_0 && count > 1)) {
-              is_unique = false;
-              break;
+              return false;
             }
           }
 
-          if (is_unique) {
-            // the row is removed
-            --classes.get_rows_count(entry);
-            classes.try_free_class(entry.class_id);
-          } else {
-            new_entries.push_back(entry);
-          }
-        }
+          // the entry has unique class => it is removed
+          --classes.get_rows_count(entry);
+          classes.try_free_class(entry.class_id);
 
-        entries = std::move(new_entries);
+          return true;
+        });
       }
     }
 
@@ -567,10 +552,6 @@ class Tables {
     }
 
     for (size_t row = 0; row < n; ++row) {
-      if (transposed_[row].size() > max_size) {
-        continue;
-      }
-
       for (const auto entry : rows[row]) {
         m[entry.cnt_0][entry.cnt_1][--classes.get_rows_count(entry)] = {
             entry.class_id, row};
@@ -653,7 +634,3 @@ class Tables {
 };
 
 }  // namespace seekers
-
-// 36368635500ns (unsorted)
-// 8972055458ns (2)
-// 7892977666ns (5)

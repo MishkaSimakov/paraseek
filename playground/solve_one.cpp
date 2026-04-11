@@ -10,7 +10,7 @@
 #include "utils/Printing.h"
 
 int main() {
-  const auto problem_name = "app1-2";
+  const auto problem_name = "problem1";
   std::println("{}", problem_name);
 
   auto problem = get_problem_matrices(problem_name, true);
