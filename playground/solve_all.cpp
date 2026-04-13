@@ -14,15 +14,20 @@
 using namespace std::chrono_literals;
 
 int main() {
-  std::ofstream os(paths::log("runtimes.csv"));
-  std::println(os, "problem_name,tables_time,bf_time");
+  std::ofstream bf_os(paths::log("bf_runtime.csv"));
+  std::println(bf_os, "problem_name,time");
+
+  std::ofstream tables_os(paths::log("tables_runtime.csv"));
+  std::println(tables_os, "problem_name,time");
 
   for (size_t problem_index = 0; problem_index < problems_names.size();
        ++problem_index) {
-    std::println("{}/{}: {}", problem_index + 1, problems_names.size(),
-                 problems_names[problem_index]);
+    const auto& problem_name = problems_names[problem_index];
 
-    auto problem = get_problem(problems_names[problem_index], true);
+    std::println("{}/{}: {}", problem_index + 1, problems_names.size(),
+                 problem_name);
+
+    auto problem = get_problem(problem_name, true);
 
     const auto [n, d] = problem.A.shape();
 
@@ -40,16 +45,16 @@ int main() {
     });
 
     // solve using brute force
-    // seekers::BruteForceParameters bf_params{
-    // .size_limit = 1'000'000, .deadline = timing::Deadline::after(60s)};
+    seekers::BruteForceParameters bf_params{
+        .size_limit = 1'000'000, .deadline = timing::Deadline::after(600s)};
 
-    // const auto bf_duration = timing::timeit(
-    // [&] { seekers::BruteForce(2, bf_params).seek(problem.A); });
+    const auto bf_duration = timing::timeit(
+        [&] { seekers::BruteForce<double>(2, bf_params).seek(problem.A); });
 
-    // std::println(os, "{},{},{}", problems_names[problem_index],
-    // tables_duration, bf_duration);
+    std::println(bf_os, "{},{}", problem_name, bf_duration.count());
+    bf_os.flush();
 
-    std::println(os, "{},{}", problems_names[problem_index], tables_duration);
-    os.flush();
+    std::println(tables_os, "{},{}", problem_name, tables_duration.count());
+    tables_os.flush();
   }
 }

@@ -133,6 +133,11 @@ class ClassesStorage {
 struct TablesParameters {
   size_t groups_count;
   size_t max_small_row_size;
+
+  bool entries_reduction = true;
+
+  std::string log_prefix;
+  bool log_entries_growth;
 };
 
 // Hashes doubles, but not too precisely
@@ -164,12 +169,11 @@ class Tables {
   FieldHasher hasher_;
 
   const size_t max_diff;
-  const size_t groups_count;
-  const size_t max_small_row_size;
+  const TablesParameters params;
 
   // stores indices of rows sorted by size (e.g. sorted_[0] is the smallest row)
   std::vector<size_t> sorted_;
-  size_t big_rows_start_;
+  size_t big_rows_start_{};
 
   Statistics statistics_;
 
@@ -229,8 +233,6 @@ class Tables {
   }
 
   void consider_pair(size_t i, size_t j, const std::vector<Field>& front) {
-    ++statistics_.pairs_considered;
-
     if (front[i] != 0) {
       Field ratio = front[i] / front[j];
 
@@ -299,6 +301,7 @@ class Tables {
            transposed_[indices[j]].size() <=
                transposed_[indices[i]].size() + max_diff;
            ++j) {
+        ++statistics_.pairs_considered;
         consider_pair(indices[i], indices[j], front);
       }
     }
@@ -369,7 +372,7 @@ class Tables {
 
   void seek_small(const CSCMatrix<Field>& matrix) {
     const auto [n, d] = matrix.shape();
-    const size_t max_size = max_small_row_size + max_diff;
+    const size_t max_size = params.max_small_row_size + max_diff;
 
     // sort columns by size
     std::vector<size_t> columns_order(d);
@@ -404,6 +407,16 @@ class Tables {
     }
 
     for (const size_t col : columns_order) {
+      if (params.log_entries_growth) {
+        size_t total_entries = 0;
+        for (const auto& row : rows) {
+          total_entries += row.size();
+        }
+
+        logging::log_csv<size_t>({{"count", total_entries}},
+                                 params.log_prefix + "entries_growth.csv");
+      }
+
       const size_t column_size = matrix.get_column(col).size();
 
       size_t col_small_rows = 0;
@@ -416,7 +429,7 @@ class Tables {
       // TODO: for small problems, 1 is optimal (and big loop can be removed)
       // for big problems, 2-3 looks optimal
       // maybe should add a compile-time parameter
-      if (col_small_rows <= 2) {
+      if (col_small_rows <= 2 && params.entries_reduction) {
         // compare and add rows manually
         for (size_t i = 0; i < column_size; ++i) {
           const size_t row1 = matrix.get_column(col)[i].first;
@@ -523,6 +536,10 @@ class Tables {
         }
       }
 
+      if (!params.entries_reduction) {
+        continue;
+      }
+
       for (auto [row, value] : matrix.get_column(col)) {
         std::erase_if(rows[row], [&](const SmallRowEntry& entry) {
           for (size_t i = 0; entry.cnt_0 + entry.cnt_1 + i <= max_diff; ++i) {
@@ -574,9 +591,7 @@ class Tables {
 
  public:
   Tables(size_t max_diff, TablesParameters params)
-      : max_diff(max_diff),
-        groups_count(params.groups_count),
-        max_small_row_size(params.max_small_row_size) {
+      : max_diff(max_diff), params(params) {
     if (params.max_small_row_size < max_diff * 2) {
       throw std::invalid_argument(
           "max_small_row_size must be at least max_diff * 2");
@@ -588,7 +603,7 @@ class Tables {
                           .max_small_row_size = max_diff * 2}) {}
 
   Result seek(const CSCMatrix<Field>& matrix) {
-    const size_t selected_groups_count = groups_count - max_diff;
+    const size_t selected_groups_count = params.groups_count - max_diff;
 
     auto [n, d] = matrix.shape();
     transposed_ = matrix.get_transposed();
@@ -602,7 +617,7 @@ class Tables {
     big_rows_start_ = n;
 
     for (size_t i = 0; i < n; ++i) {
-      if (transposed_[sorted_[i]].size() > max_small_row_size) {
+      if (transposed_[sorted_[i]].size() > params.max_small_row_size) {
         big_rows_start_ = i;
         break;
       }
@@ -610,11 +625,11 @@ class Tables {
 
     //
     auto groups =
-        splitters::GreedySplitter<Field>().split(matrix, groups_count);
+        splitters::GreedySplitter<Field>().split(matrix, params.groups_count);
 
     auto blocks = get_blocks(matrix, groups);
 
-    std::vector<bool> mask(groups_count, false);
+    std::vector<bool> mask(params.groups_count, false);
     std::fill_n(mask.begin(), selected_groups_count, true);
 
     do {
