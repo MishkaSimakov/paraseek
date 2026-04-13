@@ -10,7 +10,8 @@ template <typename Field, typename Gen>
   requires(std::uniform_random_bit_generator<std::remove_reference_t<Gen>> &&
            std::convertible_to<double, Field>)
 Problem<Field> generate_random_problem(size_t n, size_t d, Gen&& generator,
-                                       bool feasible = true) {
+                                       bool feasible = true,
+                                       double density = 0.4) {
   std::uniform_real_distribution<double> alpha_dist(0.1, 10);
   std::uniform_real_distribution<double> value_dist(-5.0, 5.0);
   std::uniform_real_distribution<double> prob(0.0, 1.0);
@@ -24,12 +25,14 @@ Problem<Field> generate_random_problem(size_t n, size_t d, Gen&& generator,
   // --- Generate sparse A ---
   Matrix<Field> dense(n, d);
 
-  size_t base_rows = std::max(1uz, n / 2);
+  const size_t parallel_rows =
+      std::uniform_int_distribution<size_t>(0, n / 10)(generator);
+  const size_t base_rows = n - parallel_rows;
 
   // 1. Generate base rows
   for (size_t i = 0; i < base_rows; ++i) {
     for (size_t j = 0; j < d; ++j) {
-      if (prob(generator) < 0.4) {
+      if (prob(generator) < density) {
         dense[i, j] = value_dist(generator);
       }
     }

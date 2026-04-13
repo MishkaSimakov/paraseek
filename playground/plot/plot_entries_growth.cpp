@@ -6,15 +6,14 @@
 #include "ExpressionDisjointSet.h"
 #include "Reducer.h"
 #include "problems/ProblemMatrix.h"
-#include "seekers/BruteForce.h"
 #include "seekers/Tables.h"
-#include "utils/Printing.h"
 
 using namespace std::chrono_literals;
 
 int main() {
   const std::vector<std::string> problems = {
-      "neos-3402454-bohle",
+      "app1-2",
+      "square41",
   };
 
   for (size_t problem_index = 0; problem_index < problems.size();

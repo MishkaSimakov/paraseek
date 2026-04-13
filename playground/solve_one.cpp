@@ -6,15 +6,17 @@
 #include "problems/ProblemsNames.h"
 #include "seekers/BruteForce.h"
 #include "seekers/Tables.h"
-#include "seekers/TablesSimpleHashing.h"
 #include "utils/Printing.h"
 
 int main() {
-  const auto problem_name = "problem1";
+  const auto problem_name = "neos-3402454-bohle";
   std::println("{}", problem_name);
 
   auto problem = get_problem(problem_name, true);
 
+  auto sizes = problem.A.get_rows_sizes();
+  printing::print_most_frequent(sizes, 10);
+  return 0;
   seekers::TablesParameters params{
       .groups_count = 4,
       .max_small_row_size = 8,
@@ -23,8 +25,7 @@ int main() {
   for (size_t i = 0; i < 5; ++i) {
     const auto [n, d] = problem.A.shape();
 
-    std::println("  size: {} x {} (nz = {})", n, d,
-                 problem.A.nonzero_count());
+    std::println("  size: {} x {} (nz = {})", n, d, problem.A.nonzero_count());
 
     auto seeker = seekers::Tables<double, seekers::DoubleHasher>(2, params);
     auto result = seeker.seek(problem.A);

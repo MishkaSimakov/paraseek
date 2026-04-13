@@ -406,15 +406,13 @@ class Tables {
       }
     }
 
+    // for logging
+    std::vector<size_t> total_entries_count;
+    size_t current_entries_count = small_rows_cnt;
+
     for (const size_t col : columns_order) {
       if (params.log_entries_growth) {
-        size_t total_entries = 0;
-        for (const auto& row : rows) {
-          total_entries += row.size();
-        }
-
-        logging::log_csv<size_t>({{"count", total_entries}},
-                                 params.log_prefix + "entries_growth.csv");
+        total_entries_count.push_back(current_entries_count);
       }
 
       const size_t column_size = matrix.get_column(col).size();
@@ -470,9 +468,12 @@ class Tables {
             }
           }
 
-          std::erase_if(entries, [&](const SmallRowEntry& entry) {
-            return entry.cnt_0 + entry.cnt_1 > max_diff;
-          });
+          size_t erased_cnt =
+              std::erase_if(entries, [&](const SmallRowEntry& entry) {
+                return entry.cnt_0 + entry.cnt_1 > max_diff;
+              });
+
+          current_entries_count -= erased_cnt;
         }
 
         continue;
@@ -486,6 +487,7 @@ class Tables {
         for (size_t i = 0; i < entries_size; ++i) {
           --classes.get_rows_count(entries[i].class_id, entries[i].cnt_0,
                                    entries[i].cnt_1);
+          --current_entries_count;
 
           if (entries[i].cnt_0 + entries[i].cnt_1 < max_diff) {
             // class 0 (create new entry)
@@ -496,16 +498,9 @@ class Tables {
               entries.push_back(new_entry);
               ++classes.get_rows_count(new_entry.class_id, new_entry.cnt_0,
                                        new_entry.cnt_1);
+              ++current_entries_count;
             }
           }
-
-          // if (matrix.get_column(col).size() == 1) {
-          //   // we can safely skip this column, because if the row with
-          //   nonzero
-          //   // is parallel to some other row, then this element is definitely
-          //   // not present there
-          //   continue;
-          // }
 
           if (entries[i].cnt_0 + entries[i].cnt_1 < max_diff) {
             // class 1 (create new entry)
@@ -518,6 +513,7 @@ class Tables {
               entries.push_back(new_entry);
               ++classes.get_rows_count(new_entry.class_id, new_entry.cnt_0,
                                        new_entry.cnt_1);
+              ++current_entries_count;
             }
           }
 
@@ -532,6 +528,7 @@ class Tables {
                 classes.get_class(entries[i].class_id, hash, col);
             ++classes.get_rows_count(entries[i].class_id, entries[i].cnt_0,
                                      entries[i].cnt_1);
+            ++current_entries_count;
           }
         }
       }
@@ -541,23 +538,38 @@ class Tables {
       }
 
       for (auto [row, value] : matrix.get_column(col)) {
-        std::erase_if(rows[row], [&](const SmallRowEntry& entry) {
-          for (size_t i = 0; entry.cnt_0 + entry.cnt_1 + i <= max_diff; ++i) {
-            const size_t count =
-                classes.get_rows_count(entry.class_id, i, entry.cnt_1);
+        size_t erased_cnt =
+            std::erase_if(rows[row], [&](const SmallRowEntry& entry) {
+              for (size_t i = 0; entry.cnt_0 + entry.cnt_1 + i <= max_diff;
+                   ++i) {
+                const size_t count =
+                    classes.get_rows_count(entry.class_id, i, entry.cnt_1);
 
-            if ((i != entry.cnt_0 && count > 0) ||
-                (i == entry.cnt_0 && count > 1)) {
-              return false;
-            }
-          }
+                if ((i != entry.cnt_0 && count > 0) ||
+                    (i == entry.cnt_0 && count > 1)) {
+                  return false;
+                }
+              }
 
-          // the entry has unique class => it is removed
-          --classes.get_rows_count(entry.class_id, entry.cnt_0, entry.cnt_1);
-          classes.try_free_class(entry.class_id);
+              // the entry has unique class => it is removed
+              --classes.get_rows_count(entry.class_id, entry.cnt_0,
+                                       entry.cnt_1);
+              classes.try_free_class(entry.class_id);
 
-          return true;
-        });
+              return true;
+            });
+
+        current_entries_count -= erased_cnt;
+      }
+    }
+
+    if (params.log_entries_growth) {
+      std::ofstream os(paths::log(params.log_prefix + "entries_growth.csv"));
+
+      std::println(os, "count");
+
+      for (size_t value : total_entries_count) {
+        std::println(os, "{}", value);
       }
     }
 

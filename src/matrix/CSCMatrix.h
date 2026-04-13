@@ -155,6 +155,20 @@ class CSCMatrix {
     return result;
   }
 
+  std::vector<size_t> get_rows_sizes() const {
+    const auto [n, d] = shape();
+
+    std::vector<size_t> result(n, 0);
+
+    for (size_t col = 0; col < d; ++col) {
+      for (const auto [row, value] : get_column(col)) {
+        ++result[row];
+      }
+    }
+
+    return result;
+  }
+
   bool operator==(const CSCMatrix& other) const = default;
 };
 
