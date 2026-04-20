@@ -18,11 +18,11 @@ int main() {
   std::ofstream os(paths::log("tables_considered_count.csv"));
   std::println(os, "problem,groups_squared,groups_count,considered_count");
 
-  for (size_t problem_index = 0; problem_index < problems_names.size();
+  for (size_t problem_index = 0; problem_index < benchmark_set.size();
        ++problem_index) {
-    const auto& problem_name = problems_names[problem_index];
+    const auto& problem_name = benchmark_set[problem_index];
 
-    std::println("{}/{}: {}", problem_index + 1, problems_names.size(),
+    std::println("{}/{}: {}", problem_index + 1, benchmark_set.size(),
                  problem_name);
     auto problem = get_problem(problem_name, true);
 

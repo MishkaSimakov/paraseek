@@ -6,42 +6,62 @@
 #include "problems/ProblemsNames.h"
 #include "seekers/BruteForce.h"
 #include "seekers/Tables.h"
+#include "splitters/Evaluate.h"
+#include "splitters/RandomSplitter.h"
 #include "utils/Printing.h"
 
 int main() {
-  const auto problem_name = "neos-3402454-bohle";
+  const auto problem_name = "irish-electricity";
   std::println("{}", problem_name);
 
-  auto problem = get_problem(problem_name, true);
+  const auto problem = get_problem(problem_name, true);
 
-  auto sizes = problem.A.get_rows_sizes();
-  printing::print_most_frequent(sizes, 10);
-  return 0;
-  seekers::TablesParameters params{
-      .groups_count = 4,
-      .max_small_row_size = 8,
-  };
+  const auto [n, d] = problem.A.shape();
+  std::println("  size: {} x {} (nz = {})", n, d, problem.A.nonzero_count());
 
-  for (size_t i = 0; i < 5; ++i) {
-    const auto [n, d] = problem.A.shape();
+  for (size_t groups_count = 3; groups_count <= 10; ++groups_count) {
+    std::println("groups_count = {}", groups_count);
 
-    std::println("  size: {} x {} (nz = {})", n, d, problem.A.nonzero_count());
+    // with small
+    {
+      seekers::TablesParameters params{
+          .groups_count = groups_count,
+          .max_small_row_size = 0,
+          .log_prefix = "with_small_",
+      };
 
-    auto seeker = seekers::Tables<double, seekers::DoubleHasher>(2, params);
-    auto result = seeker.seek(problem.A);
+      auto seeker =
+          seekers::Tables<double, seekers::DoubleHasher,
+                          splitters::RandomSplitter<double>>(2, params);
+      seeker.seek(problem.A);
+    }
 
-    std::println("  done!");
+    // without small
+    {
+      seekers::TablesParameters params{
+          .groups_count = groups_count,
+          .max_small_row_size = 8,
+          .log_prefix = "without_small_",
+      };
 
-    auto for_reducer = result_for_reducer(result);
-    std::println("  size = {}", for_reducer.size());
+      auto seeker =
+          seekers::Tables<double, seekers::DoubleHasher,
+                          splitters::RandomSplitter<double>>(2, params);
+      seeker.seek(problem.A);
+    }
 
-    auto [new_problem, mapping] = Reducer().apply(problem, for_reducer);
+    // without small + greedy
+    {
+      seekers::TablesParameters params{
+        .groups_count = groups_count,
+        .max_small_row_size = 8,
+        .log_prefix = "without_small_greedy_",
+    };
 
-    std::println("  {} x {} -> {} x {}", problem.A.shape().first,
-                 problem.A.shape().second, new_problem.A.shape().first,
-                 new_problem.A.shape().second);
-
-    std::println("  ----------------------");
-    problem = std::move(new_problem);
+      auto seeker =
+          seekers::Tables<double, seekers::DoubleHasher,
+                          splitters::GreedySplitter<double>>(2, params);
+      seeker.seek(problem.A);
+    }
   }
 }

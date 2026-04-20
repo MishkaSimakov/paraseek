@@ -6,6 +6,10 @@
 #include "matrix/CSCMatrix.h"
 #include "matrix/Matrix.h"
 
+// Problem is represented in the following format:
+// min c^T x + shift, such that
+// rhs_bounds.lower <= Ax <= rhs_bounds.upper
+// bounds.lower <= x <= bounds.upper
 template <typename Field>
 struct Problem {
   CSCMatrix<Field> A;

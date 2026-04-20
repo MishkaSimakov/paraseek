@@ -35,40 +35,40 @@ void compare_tables_with_brute_force(const CSCMatrix<Rational>& matrix,
 }
 
 TEST(TablesTests, CompareWithBruteForce1) {
-  for (size_t i = 0; i < 50 && i < problems_names.size(); ++i) {
-    SCOPED_TRACE(std::format("problem name: {}", problems_names[i]));
+  for (size_t i = 0; i < 50 && i < benchmark_set.size(); ++i) {
+    SCOPED_TRACE(std::format("problem name: {}", benchmark_set[i]));
 
-    auto matrix = get_problem<Rational>(problems_names[i]).A;
+    auto matrix = get_problem<Rational>(benchmark_set[i]).A;
     ASSERT_NO_FATAL_FAILURE(compare_tables_with_brute_force(
         matrix, 1, {.groups_count = 2, .max_small_row_size = 4}));
   }
 }
 
 TEST(TablesTests, CompareWithBruteForce2) {
-  for (size_t i = 0; i < 50 && i < problems_names.size(); ++i) {
-    SCOPED_TRACE(std::format("problem name: {}", problems_names[i]));
+  for (size_t i = 0; i < 50 && i < benchmark_set.size(); ++i) {
+    SCOPED_TRACE(std::format("problem name: {}", benchmark_set[i]));
 
-    auto matrix = get_problem<Rational>(problems_names[i]).A;
+    auto matrix = get_problem<Rational>(benchmark_set[i]).A;
     ASSERT_NO_FATAL_FAILURE(compare_tables_with_brute_force(
         matrix, 2, {.groups_count = 4, .max_small_row_size = 4}));
   }
 }
 
 TEST(TablesTests, CompareWithBruteForce3) {
-  for (size_t i = 0; i < 50 && i < problems_names.size(); ++i) {
-    SCOPED_TRACE(std::format("problem name: {}", problems_names[i]));
+  for (size_t i = 0; i < 50 && i < benchmark_set.size(); ++i) {
+    SCOPED_TRACE(std::format("problem name: {}", benchmark_set[i]));
 
-    auto matrix = get_problem<Rational>(problems_names[i]).A;
+    auto matrix = get_problem<Rational>(benchmark_set[i]).A;
     ASSERT_NO_FATAL_FAILURE(compare_tables_with_brute_force(
         matrix, 3, {.groups_count = 6, .max_small_row_size = 6}));
   }
 }
 
 TEST(TablesTests, CompareWithBruteForceAllRowsSmall) {
-  for (size_t i = 0; i < 50 && i < problems_names.size(); ++i) {
-    SCOPED_TRACE(std::format("problem name: {}", problems_names[i]));
+  for (size_t i = 0; i < 50 && i < benchmark_set.size(); ++i) {
+    SCOPED_TRACE(std::format("problem name: {}", benchmark_set[i]));
 
-    auto matrix = get_problem<Rational>(problems_names[i]).A;
+    auto matrix = get_problem<Rational>(benchmark_set[i]).A;
 
     const seekers::TablesParameters params{
         .groups_count = 4,

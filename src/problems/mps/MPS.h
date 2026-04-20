@@ -117,7 +117,7 @@ class MPSReader {
       }
     }
 
-    throw std::runtime_error("Unknown header card.");
+    throw std::runtime_error(std::format("Unknown header card: {}", line));
   }
 
   bool should_skip_line(const std::string& line) {

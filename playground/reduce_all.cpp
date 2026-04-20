@@ -14,29 +14,39 @@
 using namespace std::chrono_literals;
 
 int main() {
-  std::ofstream os(paths::log("runtimes.csv"));
-  std::println(os, "problem_name,tables_time,bf_time");
+  constexpr size_t max_diff = 1;
 
-  for (size_t problem_index = 0; problem_index < problems_names.size();
+  const auto filename = std::format("problems_reduction_{}.csv", max_diff);
+  std::ofstream os(paths::log(filename));
+  std::println(os,
+               "problem_name,rows_count,cols_count,new_rows_count,new_cols_"
+               "count,reduction_iterations");
+
+  for (size_t problem_index = 0; problem_index < benchmark_set.size();
        ++problem_index) {
-    std::println("{}/{}: {}", problem_index + 1, problems_names.size(),
-                 problems_names[problem_index]);
+    std::println("{}/{}: {}", problem_index + 1, benchmark_set.size(),
+                 benchmark_set[problem_index]);
 
-    auto problem = get_problem(problems_names[problem_index], true);
+    auto problem = get_problem(benchmark_set[problem_index], true);
+    const auto [init_n, init_d] = problem.A.shape();
 
     seekers::TablesParameters params{
         .groups_count = 4,
         .max_small_row_size = 8,
     };
 
+    size_t iterations = 0;
+
     // solve using tables
     for (size_t i = 0; i < 5; ++i) {
+      ++iterations;
       const auto [n, d] = problem.A.shape();
 
       std::println("  size: {} x {} (nz = {})", n, d,
                    problem.A.nonzero_count());
 
-      auto seeker = seekers::Tables<double, seekers::DoubleHasher>(2, params);
+      auto seeker =
+          seekers::Tables<double, seekers::DoubleHasher>(max_diff, params);
       auto result = seeker.seek(problem.A);
 
       std::println("  done!");
@@ -57,5 +67,10 @@ int main() {
       std::println("  ----------------------");
       problem = std::move(new_problem);
     }
+
+    std::println(os, "{},{},{},{},{},{}", benchmark_set[problem_index], init_n,
+                 init_d, problem.A.shape().first, problem.A.shape().second,
+                 iterations);
+    os.flush();
   }
 }

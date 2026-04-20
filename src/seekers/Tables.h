@@ -8,7 +8,7 @@
 #include <unordered_set>
 #include <vector>
 
-#include "../Hamming.h"
+#include "Hamming.h"
 #include "Result.h"
 #include "matrix/CSCMatrix.h"
 #include "seekers/Statistics.h"
@@ -135,6 +135,7 @@ struct TablesParameters {
   size_t max_small_row_size;
 
   bool entries_reduction = true;
+  size_t small_column_limit = 2;
 
   std::string log_prefix;
   bool log_entries_growth;
@@ -147,7 +148,8 @@ struct DoubleHasher {
   }
 };
 
-template <typename Field, typename FieldHasher>
+template <typename Field, typename FieldHasher,
+          typename Splitter = splitters::GreedySplitter<Field>>
 class Tables {
   // TODO: cnt_0 and cnt_1 are small, maybe transform them into uint8_t
   // or even merge into one uint8_t
@@ -234,15 +236,14 @@ class Tables {
 
   void consider_pair(size_t i, size_t j, const std::vector<Field>& front) {
     if (front[i] != 0) {
-      Field ratio = front[i] / front[j];
+      const Field ratio = front[i] / front[j];
 
-      if (similarity::hamming_fixed_ratio(transposed_[i], transposed_[j],
-                                          ratio) <= max_diff) {
+      if (similarity::hamming_fixed_ratio_leq(transposed_[i], transposed_[j],
+                                              ratio, max_diff)) {
         add_to_answer(i, j);
       }
     } else {
-      if (similarity::fast_hamming(transposed_[i], transposed_[j]) <=
-          max_diff) {
+      if (similarity::hamming_leq(transposed_[i], transposed_[j], max_diff)) {
         add_to_answer(i, j);
       }
     }
@@ -427,7 +428,8 @@ class Tables {
       // TODO: for small problems, 1 is optimal (and big loop can be removed)
       // for big problems, 2-3 looks optimal
       // maybe should add a compile-time parameter
-      if (col_small_rows <= 2 && params.entries_reduction) {
+      if (col_small_rows <= params.small_column_limit &&
+          params.entries_reduction) {
         // compare and add rows manually
         for (size_t i = 0; i < column_size; ++i) {
           const size_t row1 = matrix.get_column(col)[i].first;
@@ -605,8 +607,9 @@ class Tables {
   Tables(size_t max_diff, TablesParameters params)
       : max_diff(max_diff), params(params) {
     if (params.max_small_row_size < max_diff * 2) {
-      throw std::invalid_argument(
-          "max_small_row_size must be at least max_diff * 2");
+      std::cerr << "Warning: max_small_row_size must be at least max_diff * 2. "
+                   "Otherwise correctness is not guaranteed!"
+                << std::endl;
     }
   }
 
@@ -636,20 +639,22 @@ class Tables {
     }
 
     //
-    auto groups =
-        splitters::GreedySplitter<Field>().split(matrix, params.groups_count);
+    statistics_.big_rows_duration = timing::timeit([&] {
+      auto groups = Splitter().split(matrix, params.groups_count);
 
-    auto blocks = get_blocks(matrix, groups);
+      auto blocks = get_blocks(matrix, groups);
 
-    std::vector<bool> mask(params.groups_count, false);
-    std::fill_n(mask.begin(), selected_groups_count, true);
+      std::vector<bool> mask(params.groups_count, false);
+      std::fill_n(mask.begin(), selected_groups_count, true);
 
-    do {
-      seek_table(matrix, mask, blocks);
-    } while (std::ranges::prev_permutation(mask).found);
+      do {
+        seek_table(matrix, mask, blocks);
+      } while (std::ranges::prev_permutation(mask).found);
+    });
 
     // process all small rows
-    seek_small(matrix);
+    statistics_.small_rows_duration =
+        timing::timeit([&] { seek_small(matrix); });
 
     // remove duplicates from the singular part of the result
     std::ranges::sort(result_singular_);

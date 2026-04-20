@@ -15,13 +15,13 @@ int main() {
   std::ofstream os(paths::log("splitter_score_greedy_improved.csv"));
   std::println(os, "problem_name,score");
 
-  for (size_t i = 0; i < problems_names.size(); ++i) {
-    const auto problem_name = problems_names[i];
+  for (size_t i = 0; i < benchmark_set.size(); ++i) {
+    const auto problem_name = benchmark_set[i];
     if (problem_name != "neos-3402454-bohle") {
       continue;
     }
 
-    std::println("{}/{}: {}", i + 1, problems_names.size(), problem_name);
+    std::println("{}/{}: {}", i + 1, benchmark_set.size(), problem_name);
 
     auto matrix = get_problem(problem_name, true).A;
     std::println("  size: {} x {} (nz = {})", matrix.shape().first,

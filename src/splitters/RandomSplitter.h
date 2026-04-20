@@ -4,11 +4,12 @@
 
 namespace splitters {
 
+template <typename Field>
 class RandomSplitter {
  public:
   RandomSplitter() = default;
 
-  std::vector<std::vector<size_t>> split(const CSCMatrix<double>& matrix,
+  std::vector<std::vector<size_t>> split(const CSCMatrix<Field>& matrix,
                                          size_t groups_count) {
     const auto [n, d] = matrix.shape();
     std::vector<std::vector<size_t>> groups(groups_count);
