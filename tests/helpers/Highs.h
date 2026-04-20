@@ -52,8 +52,17 @@ HighsLp to_highs(const Problem<Field>& problem) {
   lp.row_upper_.resize(n);
 
   for (size_t row = 0; row < n; ++row) {
-    lp.row_lower_[row] = lp.row_upper_[row] =
-        static_cast<double>(problem.b[row]);
+    lp.row_lower_[row] =
+        problem.rhs_bounds[row]
+            .lower
+            .transform([](Field value) { return static_cast<double>(value); })
+            .value_or(-kHighsInf);
+
+    lp.row_upper_[row] =
+        problem.rhs_bounds[row]
+            .upper
+            .transform([](Field value) { return static_cast<double>(value); })
+            .value_or(kHighsInf);
   }
 
   lp.a_matrix_.start_.resize(d + 1);

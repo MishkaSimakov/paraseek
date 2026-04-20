@@ -1,31 +1,26 @@
-#include <scip/scip.h>
-#include <scip/scipdefplugins.h>
+#include "scip/scip.h"
 
+#include "scip/scipdefplugins.h"
 #include "utils/Paths.h"
 
-int main() {
-  SCIP* scip = nullptr;
+int main(int argc, char** argv) {
+  SCIP* scip = NULL;
 
-  // Create SCIP instance
-  SCIP_CALL(SCIPcreate(&scip));
+  SCIPcreate(&scip);
+  SCIPincludeDefaultPlugins(scip);
 
-  // Include default plugins (presolve, heuristics, etc.)
-  SCIP_CALL(SCIPincludeDefaultPlugins(scip));
+  // Read MPS
+  auto path = paths::problem("square47.mps");
+  SCIPreadProb(scip, path.c_str(), NULL);
 
-  // Read MPS file
-  auto path = paths::problem("problem1.mps");
-  SCIP_CALL(SCIPreadProb(scip, path.c_str(), nullptr));
+  // Presolve
+  SCIPpresolve(scip);
 
-  // Transform problem (this triggers presolve)
-  SCIP_CALL(SCIPtransformProb(scip));
+  // Write transformed problem
+  auto output_path = paths::problem("presolved_square47.mps");
+  SCIPwriteTransProblem(scip, output_path.c_str(), "mps", FALSE);
 
-  // Explicitly run presolve
-  SCIP_CALL(SCIPpresolve(scip));
-
-  // Print presolved problem statistics
-  SCIP_CALL(SCIPprintStatistics(scip, nullptr));
-
-  // If you want to stop here (only preprocessing)
+  // Cleanup
   SCIPfree(&scip);
 
   return 0;

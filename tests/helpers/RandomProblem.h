@@ -101,5 +101,10 @@ Problem<Field> generate_random_problem(size_t n, size_t d, Gen&& generator,
     bounds[j].upper = upper;
   }
 
-  return {A, b, c, bounds};
+  std::vector<Bound<Field>> rhs_bounds(n);
+  for (size_t row = 0; row < n; ++row) {
+    rhs_bounds[row] = {b[row], b[row]};
+  }
+
+  return {A, rhs_bounds, c, bounds};
 }

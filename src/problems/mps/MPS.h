@@ -308,7 +308,7 @@ class MPSReader {
     }
 
     // rhs column
-    std::vector<Field> b(rows_enumeration.size());
+    std::vector<Bound<Field>> rhs_bounds(rows_enumeration.size());
 
     for (const auto& [name, row] : rows_) {
       if (row.type == RowType::OBJECTIVE) {
@@ -316,10 +316,17 @@ class MPSReader {
       }
 
       const size_t index = rows_enumeration.at(name);
-      b[index] = row.rhs;
+
+      if (replace_inequalities || row.type == RowType::EQUAL) {
+        rhs_bounds[index] = {row.rhs, row.rhs};
+      } else if (row.type == RowType::LESS_THAN) {
+        rhs_bounds[index] = {std::nullopt, row.rhs};
+      } else if (row.type == RowType::GREATER_THAN) {
+        rhs_bounds[index] = {row.rhs, std::nullopt};
+      }
     }
 
-    return {A, b, c, bounds};
+    return {A, rhs_bounds, c, bounds};
   }
 
   // generates a problem suitable for simplex method:

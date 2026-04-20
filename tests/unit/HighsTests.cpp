@@ -10,7 +10,10 @@ TEST(ReducerTests, CheckHighs) {
   // 3x + y <= 5
   CSCMatrix<double> A = {{1, 2, 1, 0}, {3, 1, 0, 1}};
 
-  std::vector<double> b = {4, 5};
+  std::vector<Bound<double>> rhs_bounds = {
+      {4, 4},
+      {5, 5},
+  };
 
   // Objective: maximize x + y
   std::vector<double> c = {-1, -1, 0, 0};
@@ -23,7 +26,7 @@ TEST(ReducerTests, CheckHighs) {
       {0, std::nullopt},
   };
 
-  Problem problem(A, b, c, bounds);
+  Problem problem(A, rhs_bounds, c, bounds);
 
   auto solution = solve(problem);
 

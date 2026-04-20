@@ -11,7 +11,7 @@
 #include "utils/Printing.h"
 
 int main() {
-  const auto problem_name = "irish-electricity";
+  const auto problem_name = "presolved_square47";
   std::println("{}", problem_name);
 
   const auto problem = get_problem(problem_name, true);

@@ -89,8 +89,15 @@ class Reducer {
         continue;
       }
 
+      // apply transformation only to equalities
+      if (!problem.rhs_bounds[i].is_fixed() ||
+          !problem.rhs_bounds[j].is_fixed()) {
+        continue;
+      }
+
       // subtract vectors
-      double rhs_diff = problem.b[i] - *ratio * problem.b[j];
+      double rhs_diff =
+          *problem.rhs_bounds[i].lower - *ratio * *problem.rhs_bounds[j].lower;
 
       SparseVector<double> diff;
       for (auto [i, x, y] : SparseZipRange{transposed[i], transposed[j]}) {
@@ -140,14 +147,14 @@ class Reducer {
     }
 
     // classes_enumeration.size() - 1 because of the constant variables class
-    auto result =
-        Problem<double>::with_size(saved_rows_count, classes_enumeration.size() - 1);
+    auto result = Problem<double>::with_size(saved_rows_count,
+                                             classes_enumeration.size() - 1);
     result.shift = problem.shift;
 
     // TODO: here problem may be proven to be unfeasible?
     for (size_t i = 0; i < n; ++i) {
       if (saved_rows[i] != -1) {
-        result.b[saved_rows[i]] = problem.b[i];
+        result.rhs_bounds[saved_rows[i]] = problem.rhs_bounds[i];
       }
     }
 
@@ -184,7 +191,7 @@ class Reducer {
 
           for (const auto [row, coef] : problem.A.get_column(col)) {
             if (saved_rows[row] != -1) {
-              result.b[saved_rows[row]] -= value * coef;
+              result.rhs_bounds[saved_rows[row]] -= value * coef;
             }
           }
 
@@ -211,7 +218,7 @@ class Reducer {
         for (const auto [row, value] : problem.A.get_column(col)) {
           if (saved_rows[row] != -1) {
             column[saved_rows[row]] += value * expr.alpha();
-            result.b[saved_rows[row]] -= value * expr.beta();
+            result.rhs_bounds[saved_rows[row]] -= value * expr.beta();
           }
         }
 

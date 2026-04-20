@@ -1,7 +1,3 @@
-include(load_google_test.cmake)
-include(load_highs.cmake)
-include(load_boost.cmake)
-
 enable_testing()
 
 add_executable(tests)

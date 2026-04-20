@@ -9,8 +9,9 @@
 #include "helpers/RandomProblem.h"
 #include "problems/Problem.h"
 
-template<typename Field>
-void check_feasible(const Problem<Field>& problem, const std::vector<double>& x) {
+template <typename Field>
+void check_feasible(const Problem<Field>& problem,
+                    const std::vector<double>& x) {
   const auto [n, d] = problem.A.shape();
 
   ASSERT_EQ(x.size(), d);
@@ -24,11 +25,11 @@ void check_feasible(const Problem<Field>& problem, const std::vector<double>& x)
   }
 
   for (size_t row = 0; row < n; ++row) {
-    ASSERT_NEAR(real[row], static_cast<double>(problem.b[row]), 1e-6);
+    ASSERT_TRUE(problem.rhs_bounds[row].is_inside(real[row]));
   }
 }
 
-template<typename Field>
+template <typename Field>
 void assert_reducer_correct(
     const Problem<Field>& problem,
     const std::vector<std::pair<size_t, size_t>>& rows) {
@@ -95,12 +96,15 @@ void assert_reducer_correct(
 TEST(ReducerTests, test_small_problem_1) {
   CSCMatrix<double> A = {{1, 0, 2, 3}, {0, 1, 1, 3}};
 
-  std::vector<double> b = {0, 0};
+  std::vector<Bound<double>> rhs_bounds = {
+      {0, 0},
+      {0, 0},
+  };
   std::vector<double> c = {1, 2, 3, 4};
 
   std::vector<Bound<double>> bounds(4);
 
-  const Problem problem(A, b, c, bounds);
+  const Problem problem(A, rhs_bounds, c, bounds);
 
   assert_reducer_correct(problem, {{0, 1}});
 }
@@ -112,12 +116,16 @@ TEST(ReducerTests, test_small_problem_2) {
       {0, 0, 3, 3},
   };
 
-  std::vector<double> b = {1, 2, 3};
+  std::vector<Bound<double>> rhs_bounds = {
+      {1, 1},
+      {2, 2},
+      {3, 3},
+  };
   std::vector<double> c = {1, 2, 3, 4};
 
   std::vector<Bound<double>> bounds(4);
 
-  const Problem problem(A, b, c, bounds);
+  const Problem problem(A, rhs_bounds, c, bounds);
 
   ASSERT_NO_FATAL_FAILURE(assert_reducer_correct(problem, {{0, 1}}));
 }
@@ -129,12 +137,16 @@ TEST(ReducerTests, test_small_problem_3) {
       {0, 0, 3, 3},
   };
 
-  std::vector<double> b = {1, 2, 3};
+  std::vector<Bound<double>> rhs_bounds = {
+      {1, 1},
+      {2, 2},
+      {3, 3},
+  };
   std::vector<double> c = {1, 2, 3, 4};
 
   std::vector<Bound<double>> bounds(4);
 
-  const Problem problem(A, b, c, bounds);
+  const Problem problem(A, rhs_bounds, c, bounds);
 
   ASSERT_NO_FATAL_FAILURE(assert_reducer_correct(problem, {{0, 1}}));
 }
