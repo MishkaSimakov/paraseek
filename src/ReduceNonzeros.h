@@ -28,18 +28,20 @@ class ReduceNonzeros {
   [[no_unique_address]]
   FieldHasher hasher_;
 
+  [[no_unique_address]]
+  Splitter splitter_;
+
   const size_t groups_count;
   const size_t selected_groups_count;
 
   // subtrahends_[i] = (j, \alpha) means that row i should be changed to:
   // r_i + \alpha * r_j
   // subtrahends_[i] = (-1, \alpha) means that row i should not be changed
-  std::vector<std::pair<size_t, double>> subtrahends_;
+  std::vector<std::pair<size_t, Field>> subtrahends_;
 
-  std::vector<SparseVector<Field>> transposed_;
+  std::vector<size_t> rows_sizes_;
 
   // For each row a list of blocks is returned
-  // class_id is in [0, n - 1]
   std::vector<std::vector<Block>> get_blocks(
       const CSCMatrix<Field>& matrix,
       const std::vector<std::vector<size_t>>& groups) const {
@@ -51,9 +53,6 @@ class ReduceNonzeros {
     }
 
     std::unordered_map<std::pair<size_t, size_t>, size_t> map;
-
-    // map classes into [0, n - 1]
-    std::unordered_map<size_t, size_t> domain_map;
 
     for (size_t group_id = 0; group_id < groups.size(); ++group_id) {
       size_t classes_cnt = 1;
@@ -78,20 +77,6 @@ class ReduceNonzeros {
           }
 
           blocks[row][group_id].class_id = itr->second;
-        }
-      }
-
-      domain_map.clear();
-      size_t current_class = 0;
-
-      for (size_t row = 0; row < n; ++row) {
-        auto [itr, inserted] =
-            domain_map.emplace(blocks[row][group_id].class_id, current_class);
-
-        blocks[row][group_id].class_id = itr->second;
-
-        if (inserted) {
-          ++current_class;
         }
       }
     }
@@ -159,95 +144,6 @@ class ReduceNonzeros {
     return active_span;
   }
 
-  // Returns subspan of merged that contains merged classes info for active rows
-  // Uses LSD for sorting
-  std::span<MergedBlock> get_merged_classes_lsd(
-      const std::vector<bool>& groups_mask,
-      const std::vector<std::vector<Block>>& blocks,
-      const Problem<Field>& problem, std::vector<MergedBlock>& merged) {
-    auto [n, d] = problem.A.shape();
-
-    size_t active_count = 0;
-    for (size_t row = 0; row < n; ++row) {
-      if (subtrahends_[row].first != -1) {
-        continue;
-      }
-
-      MergedBlock result{
-          .row = row,
-          .class_id = 0,
-          .front = 0,
-          .nz_count = 0,
-      };
-
-      StreamHasher hasher;
-
-      for (size_t group_id = 0; group_id < groups_mask.size(); ++group_id) {
-        if (groups_mask[group_id]) {
-          result.nz_count += blocks[row][group_id].nz_count;
-
-          if (result.front == 0) {
-            result.front = blocks[row][group_id].front;
-          }
-
-          hasher << blocks[row][group_id].class_id;
-        }
-      }
-
-      if (result.nz_count == 0) {
-        continue;
-      }
-
-      result.class_id = hasher.get_hash();
-
-      merged[active_count] = result;
-      ++active_count;
-    }
-
-    auto active_span = std::span{merged.begin(), merged.begin() + active_count};
-
-    // LSD
-    static std::vector<size_t> sizes(n, 0);
-    static std::vector<size_t> buffer(n);
-
-    static std::vector<size_t> order = [n] {
-      std::vector<size_t> result(n);
-      std::iota(result.begin(), result.end(), 0);
-
-      return result;
-    }();
-
-    for (size_t group_id = 0; group_id < groups_mask.size(); ++group_id) {
-      if (!groups_mask[group_id]) {
-        continue;
-      }
-
-      for (size_t row = 0; row < n; ++row) {
-        sizes[blocks[row][group_id].class_id] = 0;
-      }
-
-      for (const size_t row : active_span) {
-        ++sizes[blocks[row][group_id].class_id];
-      }
-
-      size_t count = 0;
-      for (size_t i = 0; i < n; ++i) {
-        const size_t tmp = sizes[i];
-        sizes[i] = count;
-        count += tmp;
-      }
-
-      for (const size_t row :
-           std::span{order.begin(), order.begin() + active_count}) {
-        const size_t c = blocks[row][group_id].class_id;
-        buffer[sizes[c]] = row;
-        ++sizes[c];
-      }
-
-      std::swap(order, buffer);
-    }
-  }
-
   void seek_table(const std::vector<bool>& groups_mask,
                   const std::vector<std::vector<Block>>& blocks,
                   const Problem<Field>& problem) {
@@ -278,8 +174,8 @@ class ReduceNonzeros {
         }
 
         if (!candidate ||
-            transposed_[block.row].size() - block.nz_count <
-                transposed_[candidate->row].size() - candidate->nz_count) {
+            rows_sizes_[block.row] - block.nz_count <
+                rows_sizes_[candidate->row] - candidate->nz_count) {
           candidate = block;
         }
       }
@@ -296,12 +192,8 @@ class ReduceNonzeros {
           continue;
         }
 
-        if (similarity::hamming(transposed_[block.row],
-                                transposed_[subtracted.row])
-                .first < block.nz_count) {
-          subtrahends_[block.row] = {subtracted.row,
-                                     -block.front / subtracted.front};
-        }
+        subtrahends_[block.row] = {subtracted.row,
+                                   -block.front / subtracted.front};
       }
 
       class_begin = class_end;
@@ -309,17 +201,19 @@ class ReduceNonzeros {
   }
 
  public:
-  explicit ReduceNonzeros(size_t groups_count, size_t selected_group_count)
-      : groups_count(groups_count),
+  explicit ReduceNonzeros(size_t groups_count, size_t selected_group_count,
+                          Splitter splitter = {})
+      : splitter_(std::move(splitter)),
+        groups_count(groups_count),
         selected_groups_count(selected_group_count) {}
 
-  Problem<Field> apply(const Problem<Field>& problem) {
+  Problem<Field> apply(Problem<Field> problem) {
     auto [n, d] = problem.A.shape();
 
     subtrahends_.resize(n, std::pair{-1, 0});
-    transposed_ = problem.A.get_transposed();
+    rows_sizes_ = problem.A.get_rows_sizes();
 
-    auto groups = Splitter().split(problem.A, groups_count);
+    auto groups = splitter_.split(problem.A, groups_count);
 
     auto blocks = get_blocks(problem.A, groups);
 
@@ -330,18 +224,65 @@ class ReduceNonzeros {
       seek_table(mask, blocks, problem);
     } while (std::ranges::prev_permutation(mask).found);
 
-    // subtract rows
-    std::vector<std::vector<size_t>> subtrahends(n);
+    size_t found_count = 0;
     for (size_t i = 0; i < n; ++i) {
       if (subtrahends_[i].first != -1) {
-        subtrahends[subtrahends_[i].first].push_back(i);
+        ++found_count;
       }
     }
 
-    auto result = Problem<Field>::with_size(n, d);
+    std::println("  found count = {}", found_count);
 
     std::vector<Field> dense(n, 0);
 
+    // calculate hamming distance for subtracted rows, and discard subtraction
+    // if non-zeros count would increase
+
+    // if subtrahend_[i] = (j, \alpha), then
+    // intersection[i] holds the number of coefficients that are equal in
+    // transposed_[i] and -\alpha * transposed_[j]
+    std::vector<size_t> intersection(n, 0);
+
+    for (size_t col = 0; col < d; ++col) {
+      for (const auto [row, value] : problem.A.get_column(col)) {
+        dense[row] = value;
+      }
+
+      for (const auto [row, value] : problem.A.get_column(col)) {
+        if (subtrahends_[row].first == -1) {
+          continue;
+        }
+
+        if (FieldTraits<Field>::is_nonzero(dense[subtrahends_[row].first])) {
+          ++intersection[row];
+        }
+        if (!FieldTraits<Field>::is_nonzero(
+                dense[row] +
+                subtrahends_[row].second * dense[subtrahends_[row].first])) {
+          ++intersection[row];
+        }
+      }
+
+      for (const auto [row, value] : problem.A.get_column(col)) {
+        dense[row] = 0;
+      }
+    }
+
+    for (size_t row = 0; row < n; ++row) {
+      if (subtrahends_[row].first == -1) {
+        continue;
+      }
+
+      const size_t new_nz_count = rows_sizes_[row] +
+                                  rows_sizes_[subtrahends_[row].first] -
+                                  intersection[row];
+
+      if (rows_sizes_[row] <= new_nz_count) {
+        subtrahends_[row].first = -1;
+      }
+    }
+
+    // subtract rows
     std::vector<std::vector<size_t>> minuends(n);
     for (size_t row = 0; row < n; ++row) {
       if (subtrahends_[row].first != -1) {
@@ -349,7 +290,8 @@ class ReduceNonzeros {
       }
     }
 
-    // TODO: O(nd) is not feasible for big problems, optimize this
+    CSCMatrix<Field> new_matrix(n);
+
     for (size_t col = 0; col < d; ++col) {
       for (const auto [row, value] : problem.A.get_column(col)) {
         dense[row] = value;
@@ -357,45 +299,54 @@ class ReduceNonzeros {
 
       for (const auto [row, value] : problem.A.get_column(col)) {
         for (const size_t minuend : minuends[row]) {
-          dense[minuend] += subtrahends_[minuend].second * dense[row];
+          dense[minuend] += subtrahends_[minuend].second * value;
         }
       }
 
-      result.A.add_column();
+      new_matrix.add_column();
 
       for (const auto [row, value] : problem.A.get_column(col)) {
-        result.A.push_to_last_column(row, dense[row]);
+        new_matrix.push_to_last_column(row, dense[row]);
         dense[row] = 0;
       }
 
       for (const auto [row, value] : problem.A.get_column(col)) {
         for (const size_t minuend : minuends[row]) {
           if (dense[minuend] != 0) {
-            result.A.push_to_last_column(minuend, dense[minuend]);
+            new_matrix.push_to_last_column(minuend, dense[minuend]);
             dense[minuend] = 0;
           }
         }
       }
     }
 
-    result.rhs_bounds = problem.rhs_bounds;
+    assert(new_matrix.nonzero_count() <= problem.A.nonzero_count());
+
+    problem.A = std::move(new_matrix);
+
+    auto new_bounds = problem.rhs_bounds;
 
     for (size_t row = 0; row < n; ++row) {
       if (subtrahends_[row].first != -1) {
-        result.rhs_bounds[row] += subtrahends_[row].second *
-                                  result.rhs_bounds[subtrahends_[row].first];
+        new_bounds[row] += subtrahends_[row].second *
+                           problem.rhs_bounds[subtrahends_[row].first];
       }
     }
 
-    result.c = problem.c;
-    result.bounds = problem.bounds;
-    result.shift = problem.shift;
-    result.proven_unfeasible = problem.proven_unfeasible;
+    problem.rhs_bounds = std::move(new_bounds);
 
-    return result;
+    return std::move(problem);
   }
 };
 
 // 28193880000ns without sorting
 // 13247375542ns std::ranges::sort
 // 15520135500ns LSD
+//
+// {        -, -0.736362,  -2.00474,         -,   4.77616},
+// {   4.6703,         -,   -3.7201,         -,         -},
+// {        -,         -,  -3.48068,  0.507319,         -},
+//
+// {        -, -0.736362,  -2.00474, -0.292197,   4.77616},
+// {   4.6703,         -,   -3.7201,         -,         -},
+// { -4.36973,         -,         -,  0.507319,         -},
