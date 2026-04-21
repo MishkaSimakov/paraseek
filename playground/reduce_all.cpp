@@ -14,7 +14,7 @@
 using namespace std::chrono_literals;
 
 int main() {
-  constexpr size_t max_diff = 1;
+  constexpr size_t max_diff = 2;
 
   const auto filename = std::format("problems_reduction_{}.csv", max_diff);
   std::ofstream os(paths::log(filename));
@@ -27,7 +27,8 @@ int main() {
     std::println("{}/{}: {}", problem_index + 1, benchmark_set.size(),
                  benchmark_set[problem_index]);
 
-    auto problem = get_problem(benchmark_set[problem_index], true);
+    auto problem =
+        get_problem("presolved_" + benchmark_set[problem_index], true);
     const auto [init_n, init_d] = problem.A.shape();
 
     seekers::TablesParameters params{

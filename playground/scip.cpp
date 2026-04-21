@@ -1,27 +1,36 @@
 #include "scip/scip.h"
 
+#include "problems/ProblemsNames.h"
 #include "scip/scipdefplugins.h"
 #include "utils/Paths.h"
 
-int main(int argc, char** argv) {
-  SCIP* scip = NULL;
+int main() {
+  for (size_t problem_index = 0; problem_index < collection_set.size();
+       ++problem_index) {
+    const auto& problem_name = collection_set[problem_index];
+    std::println("{}/{}: {}", problem_index + 1, collection_set.size(),
+                 problem_name);
 
-  SCIPcreate(&scip);
-  SCIPincludeDefaultPlugins(scip);
+    SCIP* scip = NULL;
 
-  // Read MPS
-  auto path = paths::problem("square47.mps");
-  SCIPreadProb(scip, path.c_str(), NULL);
+    SCIPcreate(&scip);
+    SCIPincludeDefaultPlugins(scip);
 
-  // Presolve
-  SCIPpresolve(scip);
+    // Read MPS
+    auto path = paths::problem(problem_name + ".mps");
+    SCIPreadProb(scip, path.c_str(), NULL);
 
-  // Write transformed problem
-  auto output_path = paths::problem("presolved_square47.mps");
-  SCIPwriteTransProblem(scip, output_path.c_str(), "mps", FALSE);
+    // Presolve
+    SCIPpresolve(scip);
 
-  // Cleanup
-  SCIPfree(&scip);
+    // Write transformed problem
+    auto output_path =
+        paths::problem(std::format("presolved_{}.mps", problem_name));
+    SCIPwriteTransProblem(scip, output_path.c_str(), "mps", FALSE);
+
+    // Cleanup
+    SCIPfree(&scip);
+  }
 
   return 0;
 }

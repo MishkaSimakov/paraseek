@@ -26,6 +26,7 @@ template <typename Field>
 class MPSReader {
   enum class SectionType {
     NAME,
+    OBJSENSE,
     ROWS,
     COLUMNS,
     RHS,
@@ -102,6 +103,7 @@ class MPSReader {
   static std::optional<SectionType> read_header_card(const std::string& line) {
     std::vector headers = {
         std::pair{"NAME", SectionType::NAME},
+        std::pair{"OBJSENSE", SectionType::OBJSENSE},
         std::pair{"ROWS", SectionType::ROWS},
         std::pair{"COLUMNS", SectionType::COLUMNS},
         std::pair{"RHS", SectionType::RHS},
@@ -169,7 +171,16 @@ class MPSReader {
 
       auto parts = get_parts(line);
 
-      if (current_section == SectionType::ROWS) {
+      if (current_section == SectionType::OBJSENSE) {
+        if (parts[0] == "MIN") {
+          objective_ = ObjectiveType::MINIMIZE;
+        } else if (parts[0] == "MAX") {
+          objective_ = ObjectiveType::MAXIMIZE;
+        } else {
+          throw std::runtime_error(
+              std::format("Unknown OBJSENSE value: {}", line));
+        }
+      } else if (current_section == SectionType::ROWS) {
         const auto parsed = RowsParser().parse(parts);
 
         rows_.emplace(parsed.name, Row(parsed.type));
