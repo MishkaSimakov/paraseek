@@ -13,8 +13,10 @@
 #include "matrix/CSCMatrix.h"
 #include "seekers/Statistics.h"
 #include "splitters/GreedySplitter.h"
+#include "utils/Accumulators.h"
 #include "utils/Hashers.h"
 #include "utils/Logging.h"
+#include "utils/Primes.h"
 
 namespace seekers {
 
@@ -25,104 +27,172 @@ namespace seekers {
  * Your favors nor your hate.
  */
 
-static size_t max_map_size = 0;
+static ArithmeticMean<double> mean_attempts;
 
+// TODO: cnt_0 and cnt_1 are small, maybe transform them into uint8_t
+// or even merge into one uint8_t
+// for every entry cnt_0 + cnt_1 <= max_diff
+template <typename Field>
+struct SmallRowEntry {
+  size_t cnt_0 = 0;
+  size_t cnt_1 = 0;
+
+  size_t class_id = 0;
+  Field front = 0;
+};
+
+template <typename Field>
 class ClassesStorage {
-  struct ClassInfo {
-    size_t map_column{0};
-    std::unordered_map<size_t, size_t> map;
+  struct ClassRecord {
+    bool occupied{false};
+
+    size_t parent_class = -1;
+    size_t column{0};
+    Field value{0};
+
     std::vector<size_t> counts;
   };
 
-  std::vector<size_t> free_classes_;
-  std::vector<ClassInfo> classes_;
-
   const size_t max_diff;
+  std::vector<ClassRecord> storage_;
 
-  void extend_classes_storage(size_t new_size) {
-    size_t old_size = classes_.size();
-    classes_.resize(new_size);
+  size_t used_classes_count_{0};
 
-    for (size_t i = old_size; i < new_size; ++i) {
-      classes_[i].counts.resize((max_diff + 1) * (max_diff + 1), 0);
-      free_classes_.push_back(i);
+  static size_t find_prime_at_least(size_t value) {
+    for (const size_t prime : primes::prime_list) {
+      if (prime >= value) {
+        return prime;
+      }
     }
+
+    throw std::runtime_error("value is too big!");
   }
+
+  size_t get_index(size_t cnt_0, size_t cnt_1) const {
+    return (max_diff + 1) * cnt_0 + cnt_1 - (cnt_0 - 1) * cnt_0 / 2;
+  }
+
+  size_t counts_size() const { return (max_diff + 1) * (max_diff + 2) / 2; }
 
  public:
-  ClassesStorage(size_t max_diff, size_t rows_count) : max_diff(max_diff) {
-    extend_classes_storage(std::max(rows_count, 64uz));
-  }
+  explicit ClassesStorage(size_t max_diff) : max_diff(max_diff) {}
 
-  size_t& get_rows_count(size_t class_id, size_t cnt_0, size_t cnt_1) {
-    return classes_[class_id].counts[cnt_0 * (max_diff + 1) + cnt_1];
+  void occupy_class(size_t class_id) {
+    assert(!storage_[class_id].occupied);
+
+    storage_[class_id].occupied = true;
+    ++used_classes_count_;
   }
 
   void try_free_class(size_t class_id) {
-    bool is_zero = true;
+    if (!storage_[class_id].occupied) {
+      return;
+    }
 
-    for (const size_t count : classes_[class_id].counts) {
-      if (count != 0) {
-        is_zero = false;
-        break;
+    for (size_t i = 0; i < counts_size(); ++i) {
+      if (storage_[class_id].counts[i] != 0) {
+        return;
       }
     }
 
-    if (is_zero) {
-      free_classes_.push_back(class_id);
+    --used_classes_count_;
+    storage_[class_id].occupied = false;
+  }
+
+  void try_extend() {
+    if (used_classes_count_ * 4 >= storage_.size()) {
+      extend(used_classes_count_ * 8);
     }
   }
 
-  size_t get_class(size_t prev_class, size_t hash, size_t column) {
-    if (free_classes_.empty()) {
-      extend_classes_storage(classes_.size() * 2);
+  void extend(size_t size) {
+    if (storage_.size() >= size) {
+      return;
     }
 
-    if (classes_[prev_class].map_column != column) {
-      classes_[prev_class].map.clear();
-      classes_[prev_class].map_column = column;
+    const size_t new_size = find_prime_at_least(size);
+    const size_t old_size = storage_.size();
+
+    storage_.resize(new_size);
+
+    for (size_t i = old_size; i < new_size; ++i) {
+      storage_[i].counts.resize(counts_size(), 0);
     }
-
-    auto [itr, inserted] =
-        classes_[prev_class].map.emplace(hash, free_classes_.back());
-
-    if (inserted) {
-      free_classes_.pop_back();
-    }
-
-    max_map_size = std::max(max_map_size, classes_[prev_class].map.size());
-
-    return itr->second;
   }
 
-  size_t pop_free_class() {
-    if (free_classes_.empty()) {
-      extend_classes_storage(classes_.size() * 2);
+  size_t get_size() const { return storage_.size(); }
+
+  void add_count(SmallRowEntry<Field> entry, size_t delta) {
+    storage_[entry.class_id].counts[get_index(entry.cnt_0, entry.cnt_1)] +=
+        delta;
+  }
+
+  void sub_count(SmallRowEntry<Field> entry, size_t delta) {
+    storage_[entry.class_id].counts[get_index(entry.cnt_0, entry.cnt_1)] -=
+        delta;
+  }
+
+  const size_t& get_count(size_t class_id, size_t cnt_0, size_t cnt_1) const {
+    return storage_[class_id].counts[get_index(cnt_0, cnt_1)];
+  }
+
+  const size_t& get_count(SmallRowEntry<Field> entry) const {
+    return get_count(entry.class_id, entry.cnt_0, entry.cnt_1);
+  }
+
+  size_t get_class(size_t prev_class, size_t column, Field value,
+                   size_t value_hash) {
+    size_t current_class = prev_class;
+
+    const size_t stride =
+        tuple_hasher_fn(value_hash, column) % (storage_.size() - 1) + 1;
+
+    size_t total_attempts = 0;
+
+    while (true) {
+      current_class = (current_class + stride) % storage_.size();
+
+      ClassRecord& record = storage_[current_class];
+
+      if (!record.occupied) {
+        ++used_classes_count_;
+
+        record.occupied = true;
+
+        record.parent_class = prev_class;
+        record.column = column;
+        record.value = value;
+
+        mean_attempts.record(total_attempts);
+        return current_class;
+      }
+
+      if (record.parent_class == prev_class && record.column == column &&
+          !FieldTraits<Field>::is_nonzero(record.value - value)) {
+        mean_attempts.record(total_attempts);
+        return current_class;
+      }
+
+      ++total_attempts;
     }
 
-    size_t free_class = free_classes_.back();
-    free_classes_.pop_back();
-    return free_class;
+    std::unreachable();
   }
 
   std::vector<std::vector<size_t>> accumulate_counts() {
-    const size_t counts_size = (max_diff + 1) * (max_diff + 1);
-
-    for (size_t i = 1; i < classes_.size(); ++i) {
-      for (size_t j = 0; j < counts_size; ++j) {
-        classes_[i].counts[j] += classes_[i - 1].counts[j];
+    for (size_t i = 1; i < storage_.size(); ++i) {
+      for (size_t j = 0; j < counts_size(); ++j) {
+        storage_[i].counts[j] += storage_[i - 1].counts[j];
       }
     }
-
-    const size_t last_class = classes_.size() - 1;
 
     std::vector<std::vector<size_t>> total(max_diff + 1);
 
     for (size_t i = 0; i <= max_diff; ++i) {
-      total[i].resize(max_diff + 1, 0);
+      total[i].resize(max_diff + 1);
 
       for (size_t j = 0; j <= max_diff; ++j) {
-        total[i][j] = get_rows_count(last_class, i, j);
+        total[i][j] = storage_.back().counts[get_index(i, j)];
       }
     }
 
@@ -151,17 +221,6 @@ struct DoubleHasher {
 template <typename Field, typename FieldHasher,
           typename Splitter = splitters::GreedySplitter<Field>>
 class Tables {
-  // TODO: cnt_0 and cnt_1 are small, maybe transform them into uint8_t
-  // or even merge into one uint8_t
-  // for every entry cnt_0 + cnt_1 <= max_diff
-  struct SmallRowEntry {
-    size_t cnt_0 = 0;
-    size_t cnt_1 = 0;
-
-    size_t class_id = 0;
-    Field front = 0;
-  };
-
   struct Block {
     size_t class_id;
     Field front;
@@ -186,7 +245,8 @@ class Tables {
       result_bipartite_;
 
   // For each row a list of blocks is returned
-  std::vector<std::vector<Block>> get_blocks(
+  // Uses smart hashing that avoids collisions
+  std::vector<std::vector<Block>> get_blocks_smart(
       const CSCMatrix<Field>& matrix,
       const std::vector<std::vector<size_t>>& groups) const {
     auto [n, d] = matrix.shape();
@@ -219,6 +279,39 @@ class Tables {
           }
 
           blocks[row][group_id].class_id = itr->second;
+        }
+      }
+    }
+
+    return blocks;
+  }
+
+  // Same as get_blocks_smart, but uses simple hashing that allows collisions
+  std::vector<std::vector<Block>> get_blocks_simple(
+      const CSCMatrix<Field>& matrix,
+      const std::vector<std::vector<size_t>>& groups) const {
+    auto [n, d] = matrix.shape();
+
+    std::vector<std::vector<Block>> blocks(n);
+    for (size_t i = 0; i < n; ++i) {
+      blocks[i].resize(groups.size(), Block{0, 0});
+    }
+
+    for (size_t group_id = 0; group_id < groups.size(); ++group_id) {
+      for (const size_t col : groups[group_id]) {
+        for (const auto [row, value] : matrix.get_column(col)) {
+          if (blocks[row][group_id].front == 0) {
+            blocks[row][group_id].front = value;
+          }
+
+          const size_t value_hash =
+              hasher_(value / blocks[row][group_id].front);
+
+          RowHasher hasher(blocks[row][group_id].class_id);
+
+          hasher << col << value_hash;
+
+          blocks[row][group_id].class_id = hasher.get_hash();
         }
       }
     }
@@ -259,7 +352,6 @@ class Tables {
     std::unordered_map<size_t, size_t> classes_sizes;
 
     for (size_t i = big_rows_start_; i < n; ++i) {
-      // TODO: correct seed? RowHasher?
       const size_t row = sorted_[i];
 
       StreamHasher hasher;
@@ -285,6 +377,16 @@ class Tables {
       value = prev;
       prev += old;
     }
+
+    // std::vector<std::pair<size_t, size_t>> sizes;
+    // for (auto [class_id, size] : classes_sizes) {
+    //   sizes.emplace_back(class_id, size);
+    // }
+    //
+    // std::ranges::sort(sizes, {}, [](auto p) {
+    //   return -static_cast<double>(p.second);
+    // });
+    //
 
     // total count of big rows is stored in prev after previous loop
     // use stable sort, so that rows are remain sorted by size inside classes
@@ -390,20 +492,22 @@ class Tables {
       }
     }
 
-    ClassesStorage classes(max_diff, small_rows_cnt);
+    ClassesStorage<Field> classes(max_diff);
+    classes.extend(n * 3);
 
-    size_t init_class = classes.pop_free_class();
-    classes.get_rows_count(init_class, 0, 0) = small_rows_cnt;
+    classes.occupy_class(0);
 
-    std::vector<std::vector<SmallRowEntry>> rows(n);
+    std::vector<std::vector<SmallRowEntry<Field>>> rows(n);
     for (size_t i = 0; i < n; ++i) {
       if (transposed_[i].size() <= max_size) {
-        rows[i].push_back(SmallRowEntry{
+        rows[i].push_back(SmallRowEntry<Field>{
             .cnt_0 = 0,
             .cnt_1 = 0,
-            .class_id = init_class,
+            .class_id = 0,
             .front = 0,
         });
+
+        classes.add_count(rows[i].front(), 1);
       }
     }
 
@@ -412,6 +516,8 @@ class Tables {
     size_t current_entries_count = small_rows_cnt;
 
     for (const size_t col : columns_order) {
+      classes.extend(current_entries_count * 3);
+
       if (params.log_entries_growth) {
         total_entries_count.push_back(current_entries_count);
       }
@@ -454,24 +560,19 @@ class Tables {
 
         for (const auto [row, value] : matrix.get_column(col)) {
           auto& entries = rows[row];
-          // DO NOT REMOVE THIS: entries.size() does change during loop
-          // execution
-          const size_t entries_size = entries.size();
 
-          for (size_t i = 0; i < entries_size; ++i) {
-            --classes.get_rows_count(entries[i].class_id, entries[i].cnt_0,
-                                     entries[i].cnt_1);
-            ++entries[i].cnt_0;
+          for (SmallRowEntry<Field>& entry : entries) {
+            classes.sub_count(entry, 1);
+            ++entry.cnt_0;
 
             // otherwise this entry will be removed later
-            if (entries[i].cnt_0 + entries[i].cnt_1 <= max_diff) {
-              ++classes.get_rows_count(entries[i].class_id, entries[i].cnt_0,
-                                       entries[i].cnt_1);
+            if (entry.cnt_0 + entry.cnt_1 <= max_diff) {
+              classes.add_count(entry, 1);
             }
           }
 
           size_t erased_cnt =
-              std::erase_if(entries, [&](const SmallRowEntry& entry) {
+              std::erase_if(entries, [&](const SmallRowEntry<Field>& entry) {
                 return entry.cnt_0 + entry.cnt_1 > max_diff;
               });
 
@@ -487,34 +588,33 @@ class Tables {
         const size_t entries_size = entries.size();
 
         for (size_t i = 0; i < entries_size; ++i) {
-          --classes.get_rows_count(entries[i].class_id, entries[i].cnt_0,
-                                   entries[i].cnt_1);
+          const SmallRowEntry entry = entries[i];
+
+          classes.sub_count(entry, 1);
           --current_entries_count;
 
-          if (entries[i].cnt_0 + entries[i].cnt_1 < max_diff) {
+          if (entry.cnt_0 + entry.cnt_1 < max_diff) {
             // class 0 (create new entry)
             {
-              SmallRowEntry new_entry = entries[i];
+              SmallRowEntry new_entry = entry;
               ++new_entry.cnt_0;
 
               entries.push_back(new_entry);
-              ++classes.get_rows_count(new_entry.class_id, new_entry.cnt_0,
-                                       new_entry.cnt_1);
+              classes.add_count(new_entry, 1);
+
               ++current_entries_count;
             }
-          }
 
-          if (entries[i].cnt_0 + entries[i].cnt_1 < max_diff) {
             // class 1 (create new entry)
             {
               SmallRowEntry new_entry = entries[i];
               ++new_entry.cnt_1;
               new_entry.class_id =
-                  classes.get_class(entries[i].class_id, 0, col);
+                  classes.get_class(entry.class_id, col, 0, 41);
 
+              classes.add_count(new_entry, 1);
               entries.push_back(new_entry);
-              ++classes.get_rows_count(new_entry.class_id, new_entry.cnt_0,
-                                       new_entry.cnt_1);
+
               ++current_entries_count;
             }
           }
@@ -525,11 +625,13 @@ class Tables {
               entries[i].front = value;
             }
 
-            const size_t hash = hasher_(value / entries[i].front);
+            const Field normalized = value / entries[i].front;
+
+            const size_t hash = hasher_(normalized);
             entries[i].class_id =
-                classes.get_class(entries[i].class_id, hash, col);
-            ++classes.get_rows_count(entries[i].class_id, entries[i].cnt_0,
-                                     entries[i].cnt_1);
+                classes.get_class(entry.class_id, col, normalized, hash);
+
+            classes.add_count(entries[i], 1);
             ++current_entries_count;
           }
         }
@@ -541,11 +643,11 @@ class Tables {
 
       for (auto [row, value] : matrix.get_column(col)) {
         size_t erased_cnt =
-            std::erase_if(rows[row], [&](const SmallRowEntry& entry) {
+            std::erase_if(rows[row], [&](const SmallRowEntry<Field>& entry) {
               for (size_t i = 0; entry.cnt_0 + entry.cnt_1 + i <= max_diff;
                    ++i) {
                 const size_t count =
-                    classes.get_rows_count(entry.class_id, i, entry.cnt_1);
+                    classes.get_count(entry.class_id, i, entry.cnt_1);
 
                 if ((i != entry.cnt_0 && count > 0) ||
                     (i == entry.cnt_0 && count > 1)) {
@@ -554,8 +656,7 @@ class Tables {
               }
 
               // the entry has unique class => it is removed
-              --classes.get_rows_count(entry.class_id, entry.cnt_0,
-                                       entry.cnt_1);
+              classes.sub_count(entry, 1);
               classes.try_free_class(entry.class_id);
 
               return true;
@@ -582,15 +683,17 @@ class Tables {
     for (size_t i = 0; i <= max_diff; ++i) {
       m[i].resize(max_diff + 1);
 
-      for (size_t j = 0; j <= max_diff; ++j) {
+      for (size_t j = 0; i + j <= max_diff; ++j) {
         m[i][j].resize(total[i][j]);
       }
     }
 
     for (size_t row = 0; row < n; ++row) {
       for (const auto entry : rows[row]) {
-        m[entry.cnt_0][entry.cnt_1][--classes.get_rows_count(
-            entry.class_id, entry.cnt_0, entry.cnt_1)] = {entry.class_id, row};
+        classes.sub_count(entry, 1);
+
+        m[entry.cnt_0][entry.cnt_1][classes.get_count(entry)] = {entry.class_id,
+                                                                 row};
       }
     }
 
@@ -642,7 +745,7 @@ class Tables {
     statistics_.big_rows_duration = timing::timeit([&] {
       auto groups = Splitter().split(matrix, params.groups_count);
 
-      auto blocks = get_blocks(matrix, groups);
+      auto blocks = get_blocks_simple(matrix, groups);
 
       std::vector<bool> mask(params.groups_count, false);
       std::fill_n(mask.begin(), selected_groups_count, true);
@@ -672,3 +775,69 @@ class Tables {
 };
 
 }  // namespace seekers
+
+// /Users/mihailsimakov/Documents/Programs/raspisator/paraseek/cmake-build-release/playground/paraseek_playground_solve_all
+// native-profiler-starter: waiting for profiler...
+// native-profiler-starter: starting target executable itself...
+// 221/240: savsched1
+//   size: 295989 x 588093 (nz = 2030025)
+//  duration = 439328917ns
+// 222/240: s100
+//   size: 14733 x 364632 (nz = 1778132)
+//  duration = 51048958ns
+// 223/240: ns1760995
+//   size: 615388 x 633079 (nz = 2469135)
+//  duration = 1006750042ns
+// 224/240: co-100
+//   size: 2187 x 50431 (nz = 1997831)
+//  duration = 36972333ns
+// 225/240: bab2
+//   size: 17245 x 160600 (nz = 2040414)
+//  duration = 57086166ns
+// 226/240: neos-3402294-bobin
+//   size: 591076 x 593772 (nz = 2625756)
+//  duration = 1013255083ns
+// 227/240: neos-5104907-jarama
+//   size: 489818 x 688870 (nz = 2396562)
+//  duration = 1221269709ns
+// 228/240: ns1644855
+//   size: 40698 x 70598 (nz = 2151094)
+//  duration = 135638291ns
+// 229/240: supportcase22
+//   size: 260602 x 267091 (nz = 2488790)
+//  duration = 574233417ns
+// 230/240: supportcase12
+//   size: 166781 x 819983 (nz = 2354804)
+//  duration = 253621667ns
+// 231/240: roi5alpha10n8
+//   size: 4665 x 110813 (nz = 2374887)
+//  duration = 37637709ns
+// 232/240: supportcase7
+//   size: 6532 x 145236 (nz = 2851937)
+//  duration = 66970250ns
+// 233/240: neos-4647030-tutaki
+//   size: 8382 x 18182 (nz = 3958970)
+//  duration = 92286750ns
+// 234/240: neos-5114902-kasavu
+//   size: 961170 x 1416338 (nz = 4946550)
+//  duration = 2251279833ns
+// 235/240: supportcase19
+//   size: 10713 x 1429460 (nz = 4287456)
+//  duration = 123960375ns
+// 236/240: neos-5052403-cygnet
+//   size: 38268 x 71136 (nz = 4936572)
+//  duration = 196265916ns
+// 237/240: neos-2075418-temuka
+//   size: 349602 x 471906 (nz = 7959863)
+//  duration = 638160625ns
+// 238/240: neos-3402454-bohle
+//   size: 2897380 x 2900076 (nz = 11850972)
+//  duration = 5079115208ns
+// 239/240: square41
+//   size: 40160 x 62270 (nz = 13566462)
+//  duration = 260913208ns
+// 240/240: square47
+//   size: 61591 x 95072 (nz = 27329898)
+//  duration = 464252583ns
+//
+// Process finished with exit code 0

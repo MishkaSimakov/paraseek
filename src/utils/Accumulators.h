@@ -2,7 +2,7 @@
 
 #include <optional>
 
-#include "matrix/FieldTraits.h"
+#include "FieldTraits.h"
 
 template <typename Field>
 class ArithmeticMean {

@@ -14,19 +14,6 @@
 
 using namespace std::chrono_literals;
 
-const std::vector<std::string> bad_problems_names = {
-    "nursesched-medium04",
-    "neos-4647032-veleka",
-    "n3seq24",
-    "bab3",
-    "hypothyroid-k1",
-    "neos-4647027-thurso",
-    "neos-4647030-tutaki",
-    "8div-n59k12",
-    "neos-2991472-kalu",
-    "neos-5157194-moruya",
-};
-
 int main() {
   constexpr size_t max_diff = 2;
 
@@ -36,7 +23,7 @@ int main() {
                "problem,rows_count,cols_count,nonzeros_count,groups_squared,"
                "big_rows_time,small_rows_time,total_time");
 
-  const auto& names = collection_set;
+  const auto& names = benchmark_set;
 
   for (size_t problem_index = 0; problem_index < names.size();
        ++problem_index) {
@@ -51,7 +38,7 @@ int main() {
                    problem.A.nonzero_count());
 
       seekers::TablesParameters params{
-          .groups_count = 6,
+          .groups_count = 4,
           .max_small_row_size = 8,
           .small_column_limit = 2,
           .entries_reduction = true,
@@ -82,10 +69,3 @@ int main() {
     }
   }
 }
-
-// 21'676'706'333 (4)
-// 68'023'620'666 (3)
-// 5'326'576'875
-
-// 89'621'815'792
-// 190'866'383'125

@@ -37,10 +37,13 @@ int main() {
   //
   //   auto problem = get_problem(problem_name, true);
   // auto problem = get_problem("neos-3402454-bohle", true);
-  auto problem = get_problem("app1-2", true);
+  auto problem = get_problem("problem1", true);
 
   const auto [n, d] = problem.A.shape();
   std::println("  size: {} x {} (nz = {})", n, d, problem.A.nonzero_count());
+
+  auto sizes = problem.A.get_rows_sizes();
+  auto transposed = problem.A.get_transposed();
 
   // calculate lsh
   std::vector<std::array<int32_t, 64>> walks(n);
@@ -57,7 +60,14 @@ int main() {
 
   std::vector<uint64_t> hashes(n, 0);
 
+  size_t big_rows = 0;
+
   for (size_t row = 0; row < n; ++row) {
+    if (sizes[row] < 10) {
+      continue;
+    }
+
+    ++big_rows;
     for (size_t bit = 0; bit < 64; ++bit) {
       if (walks[row][bit] > 0) {
         hashes[row] |= static_cast<uint64_t>(1) << bit;
@@ -65,11 +75,18 @@ int main() {
     }
   }
 
+  std::println("big rows count = {}", big_rows);
+
   // find hashes with diff <= 3
   std::vector<bool> mask(6, false);
   std::fill_n(mask.begin(), 3, true);
 
   auto groups = get_groups(64, 6);
+
+  std::vector<size_t> order(n);
+  std::iota(order.begin(), order.end(), 0);
+
+  std::vector<std::pair<size_t, size_t>> result;
 
   do {
     uint64_t bitmask = 0;
@@ -81,9 +98,8 @@ int main() {
 
     std::cout << std::bitset<64>(bitmask) << std::endl;
 
-    std::ranges::sort(hashes, {}, [bitmask](uint64_t hash) -> uint64_t {
-      return hash & bitmask;
-    });
+    std::ranges::sort(
+        order, {}, [&](size_t i) -> uint64_t { return hashes[i] & bitmask; });
 
     size_t current = 0;
     size_t total = 0;
@@ -91,19 +107,36 @@ int main() {
     while (current < n) {
       size_t next = current + 1;
 
-      while (next < n &&
-             (hashes[next] & bitmask) == (hashes[current] & bitmask)) {
+      while (next < n && (hashes[order[next]] & bitmask) ==
+                             (hashes[order[current]] & bitmask)) {
         ++next;
       }
 
-      if (next > current + 10) {
-        total += (next - current) * (next - current);
+      if (hashes[order[current]] == 0) {
+        current = next;
+        continue;
       }
+
+      for (size_t i = current; i < next; ++i) {
+        for (size_t j = i + 1; j < next; ++j) {
+          ++total;
+
+          const size_t row1 = order[i];
+          const size_t row2 = order[j];
+
+          if (similarity::hamming_leq(transposed[row1], transposed[row2], 3)) {
+            result.emplace_back(row1, row2);
+          }
+        }
+      }
+
       current = next;
     }
 
     std::cout << total << std::endl;
   } while (std::ranges::prev_permutation(mask).found);
 
-  // }
+  auto normalized =
+      seekers::normalize_result(seekers::Result{.singular = result});
+  std::println("result size = {}", normalized.singular.size());
 }

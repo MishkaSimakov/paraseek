@@ -9,6 +9,7 @@
 #include "problems/ProblemsNames.h"
 #include "seekers/BruteForce.h"
 #include "seekers/Tables.h"
+#include "splitters/RandomSplitter.h"
 #include "utils/Printing.h"
 
 using namespace std::chrono_literals;
@@ -20,8 +21,10 @@ int main() {
   std::ofstream tables_os(paths::log("tables_runtime.csv"));
   std::println(tables_os, "problem_name,time");
 
-  for (size_t problem_index = 0; problem_index < benchmark_set.size();
+  for (size_t problem_index = 230; problem_index < benchmark_set.size();
        ++problem_index) {
+    seekers::mean_attempts = ArithmeticMean<double>();
+
     const auto& problem_name = benchmark_set[problem_index];
 
     std::println("{}/{}: {}", problem_index + 1, benchmark_set.size(),
@@ -39,22 +42,28 @@ int main() {
         .max_small_row_size = 8,
     };
 
-    const auto tables_duration = timing::timeit([&] {
-      seekers::Tables<double, seekers::DoubleHasher>(2, tables_params)
-          .seek(problem.A);
-    });
+    auto seeker =
+        seekers::Tables<double, seekers::DoubleHasher,
+                        splitters::RandomSplitter<double>>(2, tables_params);
+
+    const auto tables_duration =
+        timing::timeit([&] { seeker.seek(problem.A); });
+
+    std::println(" duration = {} (small rows time: {})", tables_duration, seeker.get_stats().small_rows_duration);
 
     // solve using brute force
-    seekers::BruteForceParameters bf_params{
-        .size_limit = 1'000'000, .deadline = timing::Deadline::after(600s)};
+    // seekers::BruteForceParameters bf_params{
+    //     .size_limit = 1'000'000, .deadline = timing::Deadline::after(600s)};
+    //
+    // const auto bf_duration = timing::timeit(
+    //     [&] { seekers::BruteForce<double>(2, bf_params).seek(problem.A); });
+    //
+    // std::println(bf_os, "{},{}", problem_name, bf_duration.count());
+    // bf_os.flush();
+    //
+    // std::println(tables_os, "{},{}", problem_name, tables_duration.count());
+    // tables_os.flush();
 
-    const auto bf_duration = timing::timeit(
-        [&] { seekers::BruteForce<double>(2, bf_params).seek(problem.A); });
-
-    std::println(bf_os, "{},{}", problem_name, bf_duration.count());
-    bf_os.flush();
-
-    std::println(tables_os, "{},{}", problem_name, tables_duration.count());
-    tables_os.flush();
+    std::println("  average attempts = {}", seekers::mean_attempts.mean());
   }
 }

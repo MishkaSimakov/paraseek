@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <random>
+#include <utility>
 
 #include "helpers/RandomProblem.h"
 #include "helpers/Rational.h"
@@ -15,21 +16,12 @@ void compare_tables_with_brute_force(const CSCMatrix<Rational>& matrix,
                                      size_t max_diff,
                                      seekers::TablesParameters tables_params) {
   auto bf_result = seekers::BruteForce<Rational>(max_diff).seek(matrix);
-  auto tbls_result =
-      seekers::Tables<Rational, RationalHasher>(max_diff, tables_params)
-          .seek(matrix);
+  auto tbls_result = seekers::Tables<Rational, RationalHasher>(
+                         max_diff, std::move(tables_params))
+                         .seek(matrix);
 
   auto tbls_set = seekers::normalize_result(tbls_result).as_set();
   auto bf_set = std::set(bf_result.begin(), bf_result.end());
-
-  // for (auto [i, j] : tbls_set) {
-  //   if (similarity::hamming(matrix.get_row(i), matrix.get_row(j)).first >
-  //   max_diff) {
-  //     std::println("error!");
-  //     similarity::hamming_leq(matrix.get_row(i), matrix.get_row(j), 3);
-  //     similarity::hamming(matrix.get_row(i), matrix.get_row(j));
-  //   }
-  // }
 
   ASSERT_EQ(tbls_set, bf_set);
 }
@@ -42,6 +34,8 @@ TEST(TablesTests, CompareWithBruteForce1) {
     ASSERT_NO_FATAL_FAILURE(compare_tables_with_brute_force(
         matrix, 1, {.groups_count = 2, .max_small_row_size = 4}));
   }
+
+  std::println("mean attempts = {}", seekers::mean_attempts.mean());
 }
 
 TEST(TablesTests, CompareWithBruteForce2) {
