@@ -24,4 +24,6 @@ add_playground_target(plot_tables_considered_count plot/plot_tables_considered_c
 add_playground_target(plot_brute_force_vs_tables_small plot/plot_brute_force_vs_tables_small.cpp)
 add_playground_target(plot_brute_force_time plot/plot_brute_force_time.cpp)
 add_playground_target(plot_tables_time plot/plot_tables_time.cpp)
+add_playground_target(plot_problems_reduction plot/plot_problems_reduction.cpp)
+add_playground_target(plot_nonzeros_reduction plot/plot_nonzeros_reduction.cpp)
 

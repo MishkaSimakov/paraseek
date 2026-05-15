@@ -23,8 +23,6 @@ int main() {
 
   for (size_t problem_index = 230; problem_index < benchmark_set.size();
        ++problem_index) {
-    seekers::mean_attempts = ArithmeticMean<double>();
-
     const auto& problem_name = benchmark_set[problem_index];
 
     std::println("{}/{}: {}", problem_index + 1, benchmark_set.size(),
@@ -63,7 +61,5 @@ int main() {
     //
     // std::println(tables_os, "{},{}", problem_name, tables_duration.count());
     // tables_os.flush();
-
-    std::println("  average attempts = {}", seekers::mean_attempts.mean());
   }
 }

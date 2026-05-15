@@ -4,7 +4,7 @@
 #include "helpers/Highs.h"
 #include "problems/Problem.h"
 
-TEST(ReducerTests, CheckHighs) {
+TEST(HighsTests, CheckHighs) {
   // Constraints:
   // x + 2y <= 4
   // 3x + y <= 5

@@ -34,8 +34,6 @@ TEST(TablesTests, CompareWithBruteForce1) {
     ASSERT_NO_FATAL_FAILURE(compare_tables_with_brute_force(
         matrix, 1, {.groups_count = 2, .max_small_row_size = 4}));
   }
-
-  std::println("mean attempts = {}", seekers::mean_attempts.mean());
 }
 
 TEST(TablesTests, CompareWithBruteForce2) {
