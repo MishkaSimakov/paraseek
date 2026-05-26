@@ -1,23 +1,41 @@
 #include "Result.h"
 
+#include <algorithm>
 #include <set>
 
-seekers::SingularResult seekers::normalize_result(const Result& result) {
-  std::set<std::pair<size_t, size_t>> pairs;
+void seekers::Result::add(size_t i, size_t j) {
+  if (i < j) {
+    singular.emplace_back(i, j);
+  } else {
+    singular.emplace_back(j, i);
+  }
+}
+
+void seekers::Result::purge_singular() {
+  std::ranges::sort(singular);
+
+  std::vector<std::pair<size_t, size_t>> unique;
+  std::ranges::unique_copy(singular, std::back_inserter(unique));
+
+  singular = std::move(unique);
+}
+
+std::set<std::pair<size_t, size_t>> seekers::Result::as_set() const {
+  std::set<std::pair<size_t, size_t>> result;
 
   const auto emplace_pair = [&](size_t i, size_t j) {
     if (i > j) {
-      pairs.emplace(j, i);
+      result.emplace(j, i);
     } else if (i < j) {
-      pairs.emplace(i, j);
+      result.emplace(i, j);
     }
   };
 
-  for (auto [i, j] : result.singular) {
+  for (auto [i, j] : singular) {
     emplace_pair(i, j);
   }
 
-  for (const auto& [left, right] : result.bipartite) {
+  for (const auto& [left, right] : bipartite) {
     for (size_t i : left) {
       for (size_t j : right) {
         emplace_pair(i, j);
@@ -25,8 +43,14 @@ seekers::SingularResult seekers::normalize_result(const Result& result) {
     }
   }
 
+  return result;
+}
+
+seekers::SingularResult seekers::Result::to_singular() const {
+  const auto set = as_set();
+
   return SingularResult{
-      .singular = {pairs.begin(), pairs.end()},
+      .singular = {set.begin(), set.end()},
   };
 }
 

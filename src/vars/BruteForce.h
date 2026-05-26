@@ -5,7 +5,7 @@
 
 #include "Hamming.h"
 #include "matrix/CSCMatrix.h"
-#include "vars/Statistics.h"
+#include "utils/Time.h"
 
 namespace seekers {
 
@@ -17,12 +17,17 @@ struct BruteForceParameters {
   std::optional<timing::Deadline> deadline = std::nullopt;
 };
 
+struct BruteForceStatistics {
+  size_t pairs_considered;
+  timing::Duration duration;
+};
+
 template <typename Field>
 class BruteForce {
   const size_t max_diff;
   const BruteForceParameters params;
 
-  Statistics statistics_;
+  BruteForceStatistics statistics_;
 
   void add_to_result(std::vector<std::pair<size_t, size_t>>& result, size_t i,
                      size_t j) {
@@ -80,7 +85,7 @@ class BruteForce {
     return result;
   }
 
-  Statistics get_stats() const { return statistics_; }
+  BruteForceStatistics get_stats() const { return statistics_; }
 };
 
 }  // namespace seekers

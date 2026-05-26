@@ -174,11 +174,7 @@ class SmallRows {
 
         if (similarity::hamming_leq(transposed[row1], transposed[row2],
                                     params.max_diff)) {
-          if (row1 < row2) {
-            result_.singular.emplace_back(row1, row2);
-          } else {
-            result_.singular.emplace_back(row2, row1);
-          }
+          result_.add(row1, row2);
         }
       }
     }
@@ -388,23 +384,10 @@ class SmallRows {
       const CSCMatrix<Field>& matrix, const SmallRowsParameters& params) {
     auto seeker = SmallRows();
 
-    auto duration = timing::timeit([&] { seeker.seek_impl(matrix, params); });
+    seeker.stats_.duration =
+        timing::timeit([&] { seeker.seek_impl(matrix, params); });
 
-    seeker.stats_.duration = duration;
-
-    // remove duplicates from the singular part of the result
-    std::ranges::sort(seeker.result_.singular);
-
-    std::vector<std::pair<size_t, size_t>> unique;
-    std::ranges::unique_copy(seeker.result_.singular,
-                             std::back_inserter(unique));
-
-    auto result = Result{
-        .singular = std::move(unique),
-        .bipartite = std::move(seeker.result_.bipartite),
-    };
-
-    return {result, seeker.stats_};
+    return {std::move(seeker.result_), seeker.stats_};
   }
 };
 

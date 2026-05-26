@@ -5,9 +5,9 @@
 namespace splitters {
 
 template <typename Field>
-class RandomSplitter {
+class Random {
  public:
-  RandomSplitter() = default;
+  Random() = default;
 
   std::vector<std::vector<size_t>> split(const CSCMatrix<Field>& matrix,
                                          size_t groups_count) {

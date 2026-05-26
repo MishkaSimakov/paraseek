@@ -1,13 +1,13 @@
 #pragma once
 
-#include "GreedySplitter.h"
+#include "Greedy.h"
 #include "matrix/CSCMatrix.h"
 #include "utils/Random.h"
 
 namespace splitters {
 
 // Doesn't work. Experimental attempt to implement local search for splitting.
-class LocalSearchSplitter {
+class LocalSearch {
   std::pair<size_t, size_t> find_group(
       const std::vector<std::vector<size_t>>& groups, size_t col) {
     for (size_t group_id = 0; group_id < groups.size(); ++group_id) {
@@ -47,7 +47,7 @@ class LocalSearchSplitter {
   }
 
  public:
-  LocalSearchSplitter() = default;
+  LocalSearch() = default;
 
   std::vector<std::vector<size_t>> split(const CSCMatrix<double>& matrix,
                                          size_t groups_count) {
@@ -55,7 +55,7 @@ class LocalSearchSplitter {
 
     auto transposed = matrix.get_transposed();
 
-    const auto greedy_solution = GreedySplitter().split(matrix, groups_count);
+    const auto greedy_solution = Greedy<double>().split(matrix, groups_count);
 
     std::vector<size_t> groups(d, 0);
     for (size_t i = 0; i < groups_count; ++i) {

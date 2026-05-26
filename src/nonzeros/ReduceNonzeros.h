@@ -11,13 +11,12 @@
 #include "Hamming.h"
 #include "matrix/CSCMatrix.h"
 #include "problems/Problem.h"
-#include "splitters/RandomSplitter.h"
+#include "splitters/Random.h"
 #include "utils/Hashers.h"
 #include "utils/Logging.h"
-#include "vars/Statistics.h"
 
 template <typename Field, typename FieldHasher,
-          typename Splitter = splitters::RandomSplitter<Field>>
+          typename Splitter = splitters::Random<Field>>
 class ReduceNonzeros {
   struct Block {
     size_t class_id{0};

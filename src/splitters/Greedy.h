@@ -5,9 +5,9 @@
 namespace splitters {
 
 template <typename Field>
-class GreedySplitter {
+class Greedy {
  public:
-  GreedySplitter() = default;
+  Greedy() = default;
 
   std::vector<std::vector<size_t>> split(const CSCMatrix<Field>& matrix,
                                          size_t groups_count) {

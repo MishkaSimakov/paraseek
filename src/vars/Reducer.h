@@ -5,15 +5,15 @@
 #include <unordered_map>
 #include <unordered_set>
 
-#include "../Hamming.h"
-#include "../matrix/CSCMatrix.h"
-#include "../problems/Bound.h"
-#include "../problems/Problem.h"
-#include "../utils/Hashers.h"
-#include "../utils/ZipRows.h"
 #include "DisjointSet.h"
 #include "ExpressionDisjointSet.h"
+#include "Hamming.h"
 #include "Result.h"
+#include "matrix/CSCMatrix.h"
+#include "problems/Bound.h"
+#include "problems/Problem.h"
+#include "utils/Hashers.h"
+#include "utils/ZipRows.h"
 
 inline std::vector<std::pair<size_t, size_t>> result_for_reducer(
     const seekers::Result& result) {
