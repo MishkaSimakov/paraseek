@@ -66,14 +66,20 @@ struct Bound {
   }
 
   Bound& operator*=(Field scalar) {
+    // explicit return type is required because some Field types may have
+    // sophisticated expression template system, which cause UB later in
+    // optional::transform
     if (scalar >= 0) {
-      lower = lower.transform([scalar](Field value) { return value * scalar; });
-      upper = upper.transform([scalar](Field value) { return value * scalar; });
+      lower = lower.transform(
+          [scalar](Field value) -> Field { return value * scalar; });
+      upper = upper.transform(
+          [scalar](Field value) -> Field { return value * scalar; });
     } else {
       auto old_lower = lower;
-      lower = upper.transform([scalar](Field value) { return value * scalar; });
-      upper =
-          old_lower.transform([scalar](Field value) { return value * scalar; });
+      lower = upper.transform(
+          [scalar](Field value) -> Field { return value * scalar; });
+      upper = old_lower.transform(
+          [scalar](Field value) -> Field { return value * scalar; });
     }
 
     return *this;

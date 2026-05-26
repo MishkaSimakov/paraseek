@@ -16,39 +16,8 @@ void assert_reducer_correct(const Problem<Field>& problem) {
 
   auto reduced = ReduceNonzeros<Field, FieldHasher>(6, 3).apply(problem);
 
-  //
-  // for (auto bound : problem.bounds) {
-  //   std::cout << bound << " ";
-  // }
-  // std::cout << std::endl;
-  //
-  // for (auto bound : reduced.bounds) {
-  //   std::cout << bound << " ";
-  // }
-  // std::cout << std::endl;
-  //
-  // for (auto b : problem.b) {
-  //   std::cout << b << " ";
-  // }
-  // std::cout << std::endl;
-  //
-  // for (auto b : reduced.b) {
-  //   std::cout << b << " ";
-  // }
-  // std::cout << std::endl;
-
   const auto solution_old = solve(problem);
   const auto solution_new = solve(reduced);
-
-  // for (double value : solution_old.x) {
-  //   std::cout << value << " ";
-  // }
-  // std::cout << std::endl;
-  //
-  // for (double value : solution_new.x) {
-  //   std::cout << value << " ";
-  // }
-  // std::cout << std::endl;
 
   // Status must match
   ASSERT_EQ(solution_old.status, solution_new.status);

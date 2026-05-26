@@ -2,8 +2,7 @@
 
 #include "helpers/CheckFeasible.h"
 #include "helpers/Highs.h"
-#include "problems/ProblemMatrix.h"
-#include "problems/ProblemsNames.h"
+#include "problems/ArchivedProblem.h"
 
 // Solves problem without paraseek problem representation
 Solution full_highs_solve(const std::string& name) {
@@ -37,7 +36,7 @@ TEST(MPSReaderTests, ReadAndSolve) {
   for (const auto& name : small_problems) {
     SCOPED_TRACE(std::format("problem name: {}", name));
 
-    const auto problem = get_problem<double>(name);
+    const auto problem = get_archived<double>(name);
     const auto solution = solve(problem);
 
     // full highs pipeline without my problem class

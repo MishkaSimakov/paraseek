@@ -60,10 +60,29 @@ struct VariableExpression {
 };
 
 class Reducer {
+  // Constructs return value for apply in case the problem is proven infeasible
+  static std::pair<Problem<double>, std::vector<VariableExpression>> infeasible(
+      const Problem<double>& problem) {
+    const auto [n, d] = problem.A.shape();
+
+    std::vector<VariableExpression> expressions(d);
+    for (size_t i = 0; i < d; ++i) {
+      expressions[i].variable = i;
+    }
+
+    auto copy = problem;
+    copy.proven_unfeasible = true;
+
+    return {copy, expressions};
+  }
+
  public:
   Reducer() = default;
 
   // Returns new problem and expression of old variables in terms of new ones.
+  // If problem is proven to be infeasible, then copy of the original problem is
+  // returned with proven_unfeasible = true, vector of expressions is empty in
+  // this case.
   std::pair<Problem<double>, std::vector<VariableExpression>> apply(
       const Problem<double>& problem,
       const std::vector<std::pair<size_t, size_t>>& rows) {
@@ -85,7 +104,6 @@ class Reducer {
       auto ratio = similarity::hamming_leq(transposed[i], transposed[j], 2);
 
       if (!ratio) {
-        std::println("error!!!!");
         continue;
       }
 
@@ -118,7 +136,9 @@ class Reducer {
         cols_ds.unite(diff[0].first, d,
                       LinearExpression<double>(0, rhs_diff / diff[0].second));
       } else if (diff.size() == 0) {
-        // TODO: problem may be proven to be unfeasible here
+        if (FieldTraits<double>::is_nonzero(rhs_diff)) {
+          return infeasible(problem);
+        }
       }
     }
 
@@ -226,6 +246,10 @@ class Reducer {
         result.shift += problem.c[col] * expr.beta();
 
         result.bounds[i] ^= expr.inversed().value_at(problem.bounds[col]);
+      }
+
+      if (result.bounds[i].is_infeasible()) {
+        return infeasible(problem);
       }
 
       result.A.add_column();

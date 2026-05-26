@@ -4,7 +4,6 @@
 
 #include "Bound.h"
 #include "matrix/CSCMatrix.h"
-#include "matrix/Matrix.h"
 
 struct UnsafeTag {};
 

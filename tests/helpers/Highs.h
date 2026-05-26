@@ -102,19 +102,16 @@ Solution solve(const Problem<Field>& problem) {
   }
 
   Highs highs;
-  HighsStatus return_status;
 
-  // highs.setOptionValue("output_flag", false);
+  highs.setOptionValue("output_flag", false);
 
   auto lp = to_highs(problem);
 
-  return_status = highs.passModel(lp);
-  if (return_status != HighsStatus::kOk) {
+  if (highs.passModel(lp) != HighsStatus::kOk) {
     throw std::runtime_error("Error during highs::passModel call.");
   }
 
-  return_status = highs.run();
-  if (return_status != HighsStatus::kOk) {
+  if (highs.run() != HighsStatus::kOk) {
     throw std::runtime_error("Error during highs::run call.");
   }
 

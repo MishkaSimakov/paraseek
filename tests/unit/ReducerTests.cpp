@@ -20,42 +20,8 @@ void assert_reducer_correct(
 
   ASSERT_EQ(mapping.size(), d);
 
-  // std::cout << problem.A << std::endl;
-  // std::cout << reduced.A << std::endl;
-
-  //
-  // for (auto bound : problem.bounds) {
-  //   std::cout << bound << " ";
-  // }
-  // std::cout << std::endl;
-  //
-  // for (auto bound : reduced.bounds) {
-  //   std::cout << bound << " ";
-  // }
-  // std::cout << std::endl;
-  //
-  // for (auto b : problem.b) {
-  //   std::cout << b << " ";
-  // }
-  // std::cout << std::endl;
-  //
-  // for (auto b : reduced.b) {
-  //   std::cout << b << " ";
-  // }
-  // std::cout << std::endl;
-
   const auto solution_old = solve(problem);
   const auto solution_new = solve(reduced);
-
-  // for (double value : solution_old.x) {
-  //   std::cout << value << " ";
-  // }
-  // std::cout << std::endl;
-  //
-  // for (double value : solution_new.x) {
-  //   std::cout << value << " ";
-  // }
-  // std::cout << std::endl;
 
   // Status must match
   ASSERT_EQ(solution_old.status, solution_new.status);
@@ -132,6 +98,29 @@ TEST(ReducerTests, test_small_problem_3) {
 
   const Problem problem(A, rhs_bounds, c, bounds, is_integer);
 
+  ASSERT_NO_FATAL_FAILURE(assert_reducer_correct(problem, {{0, 1}}));
+}
+
+TEST(ReducerTests, proves_infeasibility_for_parallel_lines) {
+  CSCMatrix<double> A = {
+      {1, 2, 0, 0},
+      {2, 4, 0, 0},
+  };
+
+  std::vector<Bound<double>> rhs_bounds = {
+      {1, 1},
+      {5, 5},
+  };
+  std::vector<double> c = {1, 2, 3, 4};
+
+  std::vector<Bound<double>> bounds(4);
+  std::vector<bool> is_integer(4, false);
+
+  const Problem problem(A, rhs_bounds, c, bounds, is_integer);
+
+  auto [reduced, mapping] = Reducer().apply(problem, {{0, 1}});
+
+  ASSERT_TRUE(reduced.proven_unfeasible);
   ASSERT_NO_FATAL_FAILURE(assert_reducer_correct(problem, {{0, 1}}));
 }
 

@@ -28,7 +28,7 @@ std::optional<Field> highs_upper(double v) {
 }  // namespace detail
 
 template <typename Field>
-Problem<Field> read_via_highs(const std::string& path) {
+Problem<Field> read(const std::string& path) {
   Highs highs;
   highs.setOptionValue("output_flag", false);
 
