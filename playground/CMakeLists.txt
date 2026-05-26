@@ -14,11 +14,6 @@ add_playground_target(reduce_nonzeros reduce_nonzeros.cpp)
 add_playground_target(highs_presolve highs.cpp)
 target_link_libraries(paraseek_playground_highs_presolve PRIVATE highs)
 
-find_package(SCIP REQUIRED)
-add_playground_target(scip scip.cpp)
-target_include_directories(paraseek_playground_scip PRIVATE ${SCIP_INCLUDE_DIRS})
-target_link_libraries(paraseek_playground_scip PRIVATE ${SCIP_LIBRARIES})
-
 add_playground_target(plot_entries_growth plot/plot_entries_growth.cpp)
 add_playground_target(plot_tables_considered_count plot/plot_tables_considered_count.cpp)
 add_playground_target(plot_brute_force_vs_tables_small plot/plot_brute_force_vs_tables_small.cpp)

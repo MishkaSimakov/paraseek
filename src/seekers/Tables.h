@@ -19,15 +19,7 @@
 
 namespace seekers {
 
-/*
- * If you can look into the seeds of time
- * And say which grain will grow and which will not,
- * Speak, then, to me, who neither beg nor fear
- * Your favors nor your hate.
- */
-
-static size_t max_map_size = 0;
-
+// Stores information about patterns for small rows
 class ClassesStorage {
   struct ClassInfo {
     size_t map_column{0};
@@ -90,8 +82,6 @@ class ClassesStorage {
     if (inserted) {
       free_classes_.pop_back();
     }
-
-    max_map_size = std::max(max_map_size, classes_[prev_class].map.size());
 
     return itr->second;
   }

@@ -41,7 +41,6 @@ int main() {
     std::println("{}/{}: {}", problem_index + 1, problems.size(),
                  problems[problem_index]);
 
-    // auto problem = get_problem("presolved_" + problems[problem_index], true);
     auto problem = get_problem(problems[problem_index], true);
     const auto [n, d] = problem.A.shape();
 

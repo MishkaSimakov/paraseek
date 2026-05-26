@@ -84,8 +84,9 @@ TEST(ReducerTests, test_small_problem_1) {
   std::vector<double> c = {1, 2, 3, 4};
 
   std::vector<Bound<double>> bounds(4);
+  std::vector<bool> is_integer(4, false);
 
-  const Problem problem(A, rhs_bounds, c, bounds);
+  const Problem problem(A, rhs_bounds, c, bounds, is_integer);
 
   assert_reducer_correct(problem, {{0, 1}});
 }
@@ -105,8 +106,9 @@ TEST(ReducerTests, test_small_problem_2) {
   std::vector<double> c = {1, 2, 3, 4};
 
   std::vector<Bound<double>> bounds(4);
+  std::vector<bool> is_integer(4, false);
 
-  const Problem problem(A, rhs_bounds, c, bounds);
+  const Problem problem(A, rhs_bounds, c, bounds, is_integer);
 
   ASSERT_NO_FATAL_FAILURE(assert_reducer_correct(problem, {{0, 1}}));
 }
@@ -126,8 +128,9 @@ TEST(ReducerTests, test_small_problem_3) {
   std::vector<double> c = {1, 2, 3, 4};
 
   std::vector<Bound<double>> bounds(4);
+  std::vector<bool> is_integer(4, false);
 
-  const Problem problem(A, rhs_bounds, c, bounds);
+  const Problem problem(A, rhs_bounds, c, bounds, is_integer);
 
   ASSERT_NO_FATAL_FAILURE(assert_reducer_correct(problem, {{0, 1}}));
 }

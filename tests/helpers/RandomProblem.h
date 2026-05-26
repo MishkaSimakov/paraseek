@@ -106,5 +106,7 @@ Problem<Field> generate_random_problem(size_t n, size_t d, Gen&& generator,
     rhs_bounds[row] = {b[row], b[row]};
   }
 
-  return {A, rhs_bounds, c, bounds};
+  std::vector<bool> is_integer(d, false);
+
+  return {A, rhs_bounds, c, bounds, is_integer};
 }

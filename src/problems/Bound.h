@@ -5,7 +5,7 @@
 #include <sstream>
 #include <string>
 
-#include "../FieldTraits.h"
+#include "FieldTraits.h"
 
 enum class BoundViolationType {
   VIOLATE_UPPER_BOUND,

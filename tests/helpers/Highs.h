@@ -82,6 +82,12 @@ HighsLp to_highs(const Problem<Field>& problem) {
     lp.a_matrix_.start_[col + 1] = static_cast<int>(nnz);
   }
 
+  lp.integrality_.resize(d);
+  for (size_t j = 0; j < d; ++j) {
+    lp.integrality_[j] = problem.is_integer[j] ? HighsVarType::kInteger
+                                               : HighsVarType::kContinuous;
+  }
+
   return lp;
 }
 
@@ -96,13 +102,21 @@ Solution solve(const Problem<Field>& problem) {
   }
 
   Highs highs;
-  highs.setOptionValue("output_flag", false);
+  HighsStatus return_status;
+
+  // highs.setOptionValue("output_flag", false);
 
   auto lp = to_highs(problem);
 
-  highs.passModel(lp);
-  highs.writeModel("model.lp");
-  highs.run();
+  return_status = highs.passModel(lp);
+  if (return_status != HighsStatus::kOk) {
+    throw std::runtime_error("Error during highs::passModel call.");
+  }
+
+  return_status = highs.run();
+  if (return_status != HighsStatus::kOk) {
+    throw std::runtime_error("Error during highs::run call.");
+  }
 
   Solution sol;
   sol.status = highs.getModelStatus();

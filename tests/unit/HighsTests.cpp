@@ -26,7 +26,9 @@ TEST(HighsTests, CheckHighs) {
       {0, std::nullopt},
   };
 
-  Problem problem(A, rhs_bounds, c, bounds);
+  std::vector<bool> is_integer(4, false);
+
+  Problem problem(A, rhs_bounds, c, bounds, is_integer);
 
   auto solution = solve(problem);
 

@@ -71,9 +71,10 @@ Problem<Field> construct_problem(CSCMatrix<Field> matrix) {
   std::vector<Field> c(d, 0);
   std::vector<Bound<Field>> rhs_bounds(n, Bound<Field>{0, 0});
   std::vector<Bound<Field>> bounds(d, Bound<Field>{0, 0});
+  std::vector<bool> is_integer(d, false);
 
   return Problem<Field>(std::move(matrix), std::move(rhs_bounds), std::move(c),
-                        std::move(bounds), 0);
+                        std::move(bounds), std::move(is_integer), 0);
 }
 
 using Field = Rational;
