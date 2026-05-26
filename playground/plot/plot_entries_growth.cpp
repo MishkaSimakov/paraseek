@@ -3,12 +3,20 @@
 #include <map>
 #include <print>
 
-#include "ExpressionDisjointSet.h"
-#include "Reducer.h"
+#include "../../src/variables/ExpressionDisjointSet.h"
+#include "../../src/variables/Reducer.h"
 #include "problems/ProblemMatrix.h"
-#include "seekers/Tables.h"
+#include "variables/Tables.h"
 
 using namespace std::chrono_literals;
+
+// std::ofstream os(paths::log(params.log_prefix + "entries_growth.csv"));
+//
+// std::println(os, "count");
+//
+// for (size_t value : total_entries_count) {
+//   std::println(os, "{}", value);
+// }
 
 int main() {
   const std::vector<std::string> problems = {

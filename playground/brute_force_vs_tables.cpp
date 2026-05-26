@@ -3,9 +3,9 @@
 
 #include "problems/ProblemMatrix.h"
 #include "problems/ProblemsNames.h"
-#include "seekers/BruteForce.h"
-#include "seekers/Tables.h"
 #include "utils/Printing.h"
+#include "variables/BruteForce.h"
+#include "variables/Tables.h"
 
 int main() {
   std::ofstream os("brute_force_vs_tables.csv");

@@ -3,13 +3,13 @@
 #include <map>
 #include <print>
 
-#include "ExpressionDisjointSet.h"
-#include "ReduceNonzeros.h"
-#include "Reducer.h"
+#include "../src/nonzeros/ReduceNonzeros.h"
+#include "../src/variables/ExpressionDisjointSet.h"
+#include "../src/variables/Reducer.h"
 #include "problems/ProblemMatrix.h"
 #include "problems/ProblemsNames.h"
-#include "seekers/Tables.h"
 #include "utils/Printing.h"
+#include "variables/Tables.h"
 
 using namespace std::chrono_literals;
 

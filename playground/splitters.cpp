@@ -3,13 +3,13 @@
 
 #include "problems/ProblemMatrix.h"
 #include "problems/ProblemsNames.h"
-#include "seekers/BruteForce.h"
-#include "seekers/Tables.h"
 #include "splitters/Evaluate.h"
 #include "splitters/GreedySplitter.h"
 #include "splitters/LocalSearchSplitter.h"
 #include "splitters/RandomSplitter.h"
 #include "utils/Printing.h"
+#include "variables/BruteForce.h"
+#include "variables/Tables.h"
 
 int main() {
   std::ofstream os(paths::log("splitter_score_greedy_improved.csv"));

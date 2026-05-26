@@ -6,8 +6,8 @@
 
 #include "../../tests/helpers/RandomProblem.h"
 #include "problems/ProblemStatistics.h"
-#include "seekers/BruteForce.h"
-#include "seekers/Tables.h"
+#include "variables/BruteForce.h"
+#include "variables/Tables.h"
 
 using namespace std::chrono_literals;
 

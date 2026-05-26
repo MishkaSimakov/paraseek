@@ -1,14 +1,14 @@
 #include <chrono>
 #include <print>
 
-#include "Reducer.h"
+#include "../src/variables/Reducer.h"
 #include "problems/ProblemMatrix.h"
 #include "problems/ProblemsNames.h"
-#include "seekers/BruteForce.h"
-#include "seekers/Tables.h"
 #include "splitters/Evaluate.h"
 #include "splitters/RandomSplitter.h"
 #include "utils/Printing.h"
+#include "variables/BruteForce.h"
+#include "variables/Tables.h"
 
 int main() {
   const auto problem_name = "presolved_square47";

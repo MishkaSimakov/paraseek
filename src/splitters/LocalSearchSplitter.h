@@ -1,12 +1,12 @@
 #pragma once
 
-#include "Evaluate.h"
 #include "GreedySplitter.h"
 #include "matrix/CSCMatrix.h"
 #include "utils/Random.h"
 
 namespace splitters {
 
+// Doesn't work. Experimental attempt to implement local search for splitting.
 class LocalSearchSplitter {
   std::pair<size_t, size_t> find_group(
       const std::vector<std::vector<size_t>>& groups, size_t col) {

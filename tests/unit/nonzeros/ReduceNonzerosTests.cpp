@@ -2,13 +2,12 @@
 
 #include <random>
 
-#include "ReduceNonzeros.h"
 #include "helpers/CheckFeasible.h"
 #include "helpers/FixedSplitter.h"
 #include "helpers/Highs.h"
 #include "helpers/RandomProblem.h"
 #include "helpers/Rational.h"
-#include "seekers/Tables.h"
+#include "nonzeros/ReduceNonzeros.h"
 
 template <typename Field, typename FieldHasher>
 void assert_reducer_correct(const Problem<Field>& problem) {
@@ -116,7 +115,7 @@ TEST(ReduceNonzerosTests, test_random_small) {
     auto problem = generate_random_problem<double>(rows_count, 5, random);
 
     ASSERT_NO_FATAL_FAILURE(
-        (assert_reducer_correct<double, seekers::DoubleHasher>(problem)))
+        (assert_reducer_correct<double, DoubleHasher>(problem)))
         << std::format("iteration = {}", i);
   }
 }
@@ -130,7 +129,7 @@ TEST(ReduceNonzerosTests, test_random_big) {
     auto problem = generate_random_problem<double>(rows_count, 500, random);
 
     ASSERT_NO_FATAL_FAILURE(
-        (assert_reducer_correct<double, seekers::DoubleHasher>(problem)))
+        (assert_reducer_correct<double, DoubleHasher>(problem)))
         << std::format("iteration = {}", i);
   }
 }

@@ -1,8 +1,8 @@
 #include <benchmark/benchmark.h>
 
 #include "../src/problems/ProblemMatrix.h"
-#include "seekers/BruteForce.h"
-#include "seekers/Tables.h"
+#include "variables/BruteForce.h"
+#include "variables/Tables.h"
 
 static const std::vector<std::string> problems = {"markshare_4_0",
                                                   "markshare2",

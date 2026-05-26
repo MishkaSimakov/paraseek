@@ -11,10 +11,10 @@
 #include "Hamming.h"
 #include "matrix/CSCMatrix.h"
 #include "problems/Problem.h"
-#include "seekers/Statistics.h"
 #include "splitters/RandomSplitter.h"
 #include "utils/Hashers.h"
 #include "utils/Logging.h"
+#include "vars/Statistics.h"
 
 template <typename Field, typename FieldHasher,
           typename Splitter = splitters::RandomSplitter<Field>>

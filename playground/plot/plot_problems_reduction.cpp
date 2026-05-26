@@ -3,13 +3,13 @@
 #include <map>
 #include <print>
 
-#include "ExpressionDisjointSet.h"
-#include "Reducer.h"
+#include "../../src/variables/ExpressionDisjointSet.h"
+#include "../../src/variables/Reducer.h"
 #include "problems/ProblemMatrix.h"
 #include "problems/ProblemsNames.h"
-#include "seekers/BruteForce.h"
-#include "seekers/Tables.h"
 #include "utils/Printing.h"
+#include "variables/BruteForce.h"
+#include "variables/Tables.h"
 
 using namespace std::chrono_literals;
 

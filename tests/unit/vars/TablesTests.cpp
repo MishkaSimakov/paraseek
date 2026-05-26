@@ -7,10 +7,10 @@
 #include "helpers/Rational.h"
 #include "problems/ArchivedProblem.h"
 #include "problems/ProblemsNames.h"
-#include "seekers/BruteForce.h"
-#include "seekers/Result.h"
-#include "seekers/Tables.h"
 #include "utils/Printing.h"
+#include "vars/BruteForce.h"
+#include "vars/Result.h"
+#include "vars/Tables.h"
 
 void compare_tables_with_brute_force(const CSCMatrix<Rational>& matrix,
                                      size_t max_diff,

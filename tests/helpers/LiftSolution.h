@@ -2,8 +2,8 @@
 
 #include <vector>
 
-#include "LinearExpression.h"
-#include "Reducer.h"
+#include "vars/Reducer.h"
+#include "vars/LinearExpression.h"
 
 inline std::vector<double> lift_solution(
     const std::vector<double>& x_new,

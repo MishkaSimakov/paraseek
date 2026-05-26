@@ -86,12 +86,11 @@ struct StreamUnorderedHasher {
   }
 };
 
-
 // https://stackoverflow.com/questions/20511347/a-good-hash-function-for-a-vector/72073933
 class RowHasher {
   uint32_t hash_;
 
-public:
+ public:
   explicit RowHasher(uint32_t seed) : hash_(seed) {}
 
   template <typename T>
@@ -107,4 +106,11 @@ public:
   }
 
   uint32_t get_hash() const { return hash_; }
+};
+
+// Hashes doubles. Close values in most cases will have the same hash.
+struct DoubleHasher {
+  size_t operator()(double value) const {
+    return std::hash<double>()(std::round(value * 1e10));
+  }
 };

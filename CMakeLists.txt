@@ -1,7 +1,11 @@
 cmake_minimum_required(VERSION 3.31)
 project(paraseek)
 
-add_compile_definitions(PROBLEMS_PATH="/Users/mihailsimakov/Documents/Programs/raspisator/miplib")
+if(NOT DEFINED PROBLEMS_PATH)
+    message(FATAL_ERROR "You must specify path to MIPLIB problems in PROBLEMS_PATH variable.")
+endif()
+
+add_compile_definitions(PROBLEMS_PATH=${PROBLEMS_PATH})
 add_compile_definitions(LOG_PATH="${CMAKE_CURRENT_LIST_DIR}/log")
 set(CMAKE_CXX_STANDARD 23)
 

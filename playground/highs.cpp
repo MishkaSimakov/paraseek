@@ -1,12 +1,12 @@
 #include <Highs.h>
 
-#include "Reducer.h"
+#include "../src/variables/Reducer.h"
 #include "problems/Problem.h"
 #include "problems/ProblemMatrix.h"
 #include "problems/ProblemsNames.h"
-#include "seekers/Tables.h"
 #include "utils/Paths.h"
 #include "utils/Printing.h"
+#include "variables/Tables.h"
 
 void highs_presolve(const std::filesystem::path& input_path,
                     const std::filesystem::path& output_path) {

@@ -3,12 +3,12 @@
 
 #include <random>
 
-#include "Reducer.h"
 #include "helpers/CheckFeasible.h"
 #include "helpers/Highs.h"
 #include "helpers/LiftSolution.h"
 #include "helpers/RandomProblem.h"
 #include "problems/Problem.h"
+#include "vars/Reducer.h"
 
 template <typename Field>
 void assert_reducer_correct(
