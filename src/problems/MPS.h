@@ -1,233 +1,98 @@
 #pragma once
 
-#include <algorithm>
-#include <filesystem>
-#include <fstream>
-#include <iostream>
-#include <ranges>
-#include <sstream>
-#include <unordered_map>
+#include <Highs.h>
 
-#include "../matrix/CSCMatrix.h"
-#include "../utils/String.h"
+#include <cassert>
+#include <stdexcept>
+#include <string>
+#include <vector>
 
-enum class MPSFieldsMode { FIXED_WIDTH, SPACE_SEPARATED };
+#include "Problem.h"
+
+namespace mps {
+
+namespace detail {
 
 template <typename Field>
-class MPSReader {
-  enum class SectionType {
-    NAME,
-    ROWS,
-    COLUMNS,
-    RHS,
-    BOUNDS,
-    RANGES,
-    OBJECT,
-    ENDATA
-  };
+std::optional<Field> highs_lower(double v) {
+  return v <= -kHighsInf ? std::nullopt
+                         : std::optional<Field>(static_cast<Field>(v));
+}
 
-  struct Column {
-    std::vector<std::pair<size_t, Field>> rows;
-  };
+template <typename Field>
+std::optional<Field> highs_upper(double v) {
+  return v >= kHighsInf ? std::nullopt
+                        : std::optional<Field>(static_cast<Field>(v));
+}
 
-  enum class RowType { LESS_THAN, GREATER_THAN, EQUAL, OBJECTIVE };
+}  // namespace detail
 
-  MPSFieldsMode mode_;
-  std::unordered_map<std::string, Column> columns_;
-  std::unordered_map<std::string, size_t> rows_enumeration_;
+template <typename Field>
+Problem<Field> read(const std::string& path) {
+  Highs highs;
+  highs.setOptionValue("output_flag", false);
 
-  std::string objective_row_;
+  if (highs.readModel(path) != HighsStatus::kOk) {
+    throw std::runtime_error("HiGHS failed to read: " + path);
+  }
 
-  static RowType decode_row_type(const std::string& type) {
-    auto trimmed = str::trim(type);
+  const HighsLp& lp = highs.getLp();
 
-    switch (trimmed[0]) {
-      case 'E':
-        return RowType::EQUAL;
-      case 'L':
-        return RowType::LESS_THAN;
-      case 'G':
-        return RowType::GREATER_THAN;
-      case 'N':
-        return RowType::OBJECTIVE;
-      default:
-        throw std::runtime_error("Unknown row type.");
+  assert(lp.a_matrix_.isColwise());
+
+  const size_t n = lp.num_row_;
+  const size_t d = lp.num_col_;
+
+  CSCMatrix<Field> A(static_cast<size_t>(n));
+  for (size_t col = 0; col < d; ++col) {
+    const size_t start = lp.a_matrix_.start_[col];
+    const size_t end = lp.a_matrix_.start_[col + 1];
+
+    std::vector<std::pair<size_t, Field>> column;
+    column.reserve(end - start);
+    for (size_t i = start; i < end; ++i) {
+      column.emplace_back(static_cast<size_t>(lp.a_matrix_.index_[i]),
+                          static_cast<Field>(lp.a_matrix_.value_[i]));
+    }
+    A.add_column(column);
+  }
+
+  std::vector<Bound<Field>> rhs_bounds(n);
+  for (size_t i = 0; i < n; ++i) {
+    rhs_bounds[i] = {detail::highs_lower<Field>(lp.row_lower_[i]),
+                     detail::highs_upper<Field>(lp.row_upper_[i])};
+  }
+
+  const bool maximize = lp.sense_ == ObjSense::kMaximize;
+  const Field sign = maximize ? Field(-1) : Field(1);
+
+  std::vector<Field> c(d);
+  for (int j = 0; j < d; ++j) {
+    c[j] = sign * static_cast<Field>(lp.col_cost_[j]);
+  }
+  const Field shift = sign * static_cast<Field>(lp.offset_);
+
+  std::vector<Bound<Field>> bounds(d);
+  for (int j = 0; j < d; ++j) {
+    bounds[j] = {detail::highs_lower<Field>(lp.col_lower_[j]),
+                 detail::highs_upper<Field>(lp.col_upper_[j])};
+  }
+
+  std::vector<bool> is_integer(d, false);
+
+  for (size_t j = 0; j < d; ++j) {
+    if (!lp.integrality_.empty()) {
+      if (lp.integrality_[j] != HighsVarType::kContinuous &&
+          lp.integrality_[j] != HighsVarType::kInteger) {
+        throw std::runtime_error("Unsupported type of integrality.");
+      }
+
+      is_integer[j] = lp.integrality_[j] == HighsVarType::kInteger;
     }
   }
 
-  std::optional<std::string> get_marker_type(
-      const std::array<std::string, 6>& parts) {
-    if (parts[2] != "'MARKER'") {
-      return std::nullopt;
-    }
+  return Problem<Field>(std::move(A), std::move(rhs_bounds), std::move(c),
+                        std::move(bounds), std::move(is_integer), shift);
+}
 
-    return parts[3];
-  }
-
-  std::array<std::string, 6> get_parts(const std::string& str) const {
-    constexpr size_t kNumFields = 6;
-    constexpr size_t kFieldStartPos[kNumFields] = {1, 4, 14, 24, 39, 49};
-    constexpr size_t kFieldLength[kNumFields] = {2, 8, 8, 12, 8, 12};
-
-    std::array<std::string, 6> result;
-
-    if (mode_ == MPSFieldsMode::FIXED_WIDTH) {
-      for (size_t i = 0; i < kNumFields; ++i) {
-        size_t start = kFieldStartPos[i];
-        size_t length = kFieldLength[i];
-
-        if (start >= str.size()) {
-          break;
-        }
-        if (start + length > str.size()) {
-          length = std::string::npos;
-        }
-
-        result[i] = str::rtrim(str.substr(start, length));
-      }
-    } else if (mode_ == MPSFieldsMode::SPACE_SEPARATED) {
-      result[0] = str::rtrim(str.substr(kFieldStartPos[0], kFieldLength[0]));
-
-      size_t current_index = 1;
-      for (size_t i = kFieldStartPos[1]; i < str.size(); ++i) {
-        if (i > 0 && std::isspace(str[i]) != 0 &&
-            std::isspace(str[i - 1]) == 0) {
-          ++current_index;
-        } else if (std::isspace(str[i]) == 0) {
-          result[current_index] += str[i];
-        }
-      }
-    } else {
-      throw std::runtime_error("Unknown field mode in MPSReader.");
-    }
-
-    return result;
-  }
-
-  static std::optional<SectionType> read_header_card(const std::string& line) {
-    std::vector headers = {
-        std::pair{"NAME", SectionType::NAME},
-        std::pair{"ROWS", SectionType::ROWS},
-        std::pair{"COLUMNS", SectionType::COLUMNS},
-        std::pair{"RHS", SectionType::RHS},
-        std::pair{"BOUNDS", SectionType::BOUNDS},
-        std::pair{"RANGES", SectionType::RANGES},
-        std::pair{"OBJECT", SectionType::OBJECT},
-        std::pair{"ENDATA", SectionType::ENDATA},
-    };
-
-    for (const auto& [name, value] : headers) {
-      if (line.starts_with(name)) {
-        return value;
-      }
-    }
-
-    throw std::runtime_error("Unknown header card.");
-  }
-
-  static Field parse_field(const std::string& str) {
-    Field result;
-    std::stringstream iss(str);
-    iss >> result;
-
-    return result;
-  }
-
-  bool should_skip_line(const std::string& line) {
-    if (line.empty() || line[0] == '*') {
-      return true;
-    }
-
-    if (str::ltrim(line).empty()) {
-      return true;
-    }
-
-    return false;
-  }
-
- public:
-  explicit MPSReader(MPSFieldsMode mode) : mode_(mode) {}
-
-  void read(const std::filesystem::path& filepath) {
-    std::ifstream is(filepath);
-
-    if (!is) {
-      throw std::runtime_error("Failed to open file in MPS reader.");
-    }
-
-    std::string line;
-
-    std::optional<SectionType> current_section = std::nullopt;
-
-    while (std::getline(is, line)) {
-      if (should_skip_line(line)) {
-        continue;
-      }
-
-      // header card
-      if (line[0] != ' ') {
-        current_section = read_header_card(line);
-
-        if (current_section == SectionType::ENDATA) {
-          break;
-        }
-
-        continue;
-      }
-
-      // otherwise proceed with parsing of the current section
-      if (!current_section.has_value()) {
-        throw std::runtime_error("Section data must be inside of section.");
-      }
-
-      auto parts = get_parts(line);
-
-      if (current_section == SectionType::ROWS) {
-        if (decode_row_type(parts[0]) == RowType::OBJECTIVE) {
-          objective_row_ = parts[1];
-        }
-      } else if (current_section == SectionType::COLUMNS) {
-        auto marker = get_marker_type(parts);
-
-        // skip marker rows
-        if (marker.has_value()) {
-          continue;
-        }
-
-        std::string variable_name = parts[1];
-
-        for (size_t i = 2; i < parts.size(); i += 2) {
-          std::string row_name = parts[i];
-
-          if (row_name.empty()) {
-            break;
-          }
-
-          if (row_name == objective_row_) {
-            continue;
-          }
-
-          auto [itr, _] =
-              rows_enumeration_.emplace(row_name, rows_enumeration_.size());
-
-          columns_[variable_name].rows.emplace_back(itr->second,
-                                                    parse_field(parts[i + 1]));
-        }
-      }
-    }
-  }
-
-  CSCMatrix<Field> get_A() const {
-    CSCMatrix<Field> result(rows_enumeration_.size());
-
-    for (const auto& [_, column] : columns_) {
-      result.add_column();
-
-      for (auto [index, coef] : column.rows) {
-        result.push_to_last_column(index, coef);
-      }
-    }
-
-    return result;
-  }
-};
+}  // namespace mps

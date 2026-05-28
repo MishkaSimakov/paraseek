@@ -1,0 +1,54 @@
+#include <chrono>
+#include <fstream>
+#include <print>
+
+#include "nonzeros/ReduceNonzeros.h"
+#include "problems/ArchivedProblem.h"
+#include "problems/ProblemsNames.h"
+#include "problems/ReplaceInequalities.h"
+#include "utils/Paths.h"
+#include "utils/Time.h"
+
+using namespace std::chrono_literals;
+
+int main() {
+  const size_t groups_count = 4;
+  const size_t selected_groups_count = 2;
+
+  const auto filename = std::format("problems_nz_reduction_{}_{}.csv",
+                                    groups_count, selected_groups_count);
+  std::ofstream os(paths::log(filename));
+  std::println(os, "problem_name,old_nz_count,new_nz_count,duration");
+
+  const auto& problems = benchmark_set;
+
+  for (size_t problem_index = 0; problem_index < problems.size();
+       ++problem_index) {
+    std::println("{}/{}: {}", problem_index + 1, problems.size(),
+                 problems[problem_index]);
+
+    auto problem = get_archived("presolved_" + problems[problem_index]);
+    replace_inequalities(problem);
+
+    const auto [n, d] = problem.A.shape();
+
+    std::println("  size: {} x {} (nz = {})", n, d, problem.A.nonzero_count());
+
+    std::optional<Problem<double>> new_problem = std::nullopt;
+
+    auto duration = timing::timeit([&] {
+      new_problem = ReduceNonzeros<double, DoubleHasher>(groups_count,
+                                                         selected_groups_count)
+                        .apply(problem);
+    });
+
+    std::println("  nz count: {} -> {}", problem.A.nonzero_count(),
+                 new_problem->A.nonzero_count());
+    std::println("  duration: {}", duration);
+
+    std::println(os, "{},{},{},{}", problems[problem_index],
+                 problem.A.nonzero_count(), new_problem->A.nonzero_count(),
+                 duration.count());
+    os.flush();
+  }
+}

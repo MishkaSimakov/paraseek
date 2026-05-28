@@ -6,7 +6,7 @@
 #include <sstream>
 #include <vector>
 
-#include "FieldTraits.h"
+#include "../FieldTraits.h"
 #include "Matrix.h"
 
 template <typename Field>
@@ -154,6 +154,22 @@ class CSCMatrix {
 
     return result;
   }
+
+  std::vector<size_t> get_rows_sizes() const {
+    const auto [n, d] = shape();
+
+    std::vector<size_t> result(n, 0);
+
+    for (size_t col = 0; col < d; ++col) {
+      for (const auto [row, value] : get_column(col)) {
+        ++result[row];
+      }
+    }
+
+    return result;
+  }
+
+  bool operator==(const CSCMatrix& other) const = default;
 };
 
 template <typename Field>
@@ -174,3 +190,21 @@ std::ostream& operator<<(std::ostream& os, const CSCMatrix<Field>& matrix) {
 
   return os;
 }
+
+namespace linalg {
+
+template <typename Field>
+Matrix<Field> to_dense(const CSCMatrix<Field>& sparse) {
+  auto [n, m] = sparse.shape();
+  Matrix<Field> result(n, m);
+
+  for (size_t col = 0; col < m; ++col) {
+    for (const auto& [row, value] : sparse.get_column(col)) {
+      result[row, col] = value;
+    }
+  }
+
+  return result;
+}
+
+}  // namespace linalg

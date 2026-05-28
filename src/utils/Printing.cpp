@@ -42,15 +42,40 @@ void printing::print_result(
 void printing::print_diff(const CSCMatrix<double>& matrix,
                           const std::vector<std::pair<size_t, size_t>>& left,
                           const std::vector<std::pair<size_t, size_t>>& right) {
-  std::unordered_set left_set(left.begin(), left.end());
-  for (auto [a, b] : right) {
-    left_set.erase({a, b});
-    left_set.erase({b, a});
+  std::unordered_map<std::pair<size_t, size_t>, std::pair<bool, bool>> pairs;
+
+  for (const auto p : left) {
+    pairs[p].first = true;
   }
 
-  std::println("+ left:");
-  std::vector left_diff(left_set.begin(), left_set.end());
-  print_result(matrix, left_diff);
+  for (const auto p : right) {
+    pairs[p].second = true;
+  }
+
+  for (const auto [p, present] : pairs) {
+    if (present.first && present.second) {
+      continue;
+    }
+
+    if (present.first) {
+      std::println("+: ({}, {})", p.first, p.second);
+    } else {
+      std::println("-: ({}, {})", p.first, p.second);
+    }
+
+    auto xs = matrix.get_row(p.first);
+    auto ys = matrix.get_row(p.second);
+
+    for (auto [i, x, y] : SparseZipRange{xs, ys}) {
+      std::print("{:20.5f}", x);
+    }
+    std::print("\n");
+
+    for (auto [i, x, y] : SparseZipRange{xs, ys}) {
+      std::print("{:20.5f}", y);
+    }
+    std::print("\n\n");
+  }
 }
 
 void printing::print_small_rows_cnt(const CSCMatrix<double>& matrix,
