@@ -1,22 +1,27 @@
-#include <cassert>
 #include <chrono>
-#include <map>
+#include <fstream>
 #include <print>
 
-#include "../../src/variables/ExpressionDisjointSet.h"
-#include "../../src/variables/Reducer.h"
-#include "problems/ProblemMatrix.h"
-#include "variables/Tables.h"
+#include "problems/ArchivedProblem.h"
+#include "problems/ReplaceInequalities.h"
+#include "utils/Hashers.h"
+#include "vars/AllRows.h"
 
 using namespace std::chrono_literals;
 
-// std::ofstream os(paths::log(params.log_prefix + "entries_growth.csv"));
-//
-// std::println(os, "count");
-//
-// for (size_t value : total_entries_count) {
-//   std::println(os, "{}", value);
-// }
+struct EntriesCountLogger {
+  std::string filename;
+
+  void operator()(std::vector<size_t> entries_count) const {
+    std::ofstream os(paths::log(filename + ".csv"));
+
+    std::println(os, "count");
+
+    for (size_t value : entries_count) {
+      std::println(os, "{}", value);
+    }
+  }
+};
 
 int main() {
   const std::vector<std::string> problems = {
@@ -29,37 +34,39 @@ int main() {
     const auto& problem_name = problems[problem_index];
 
     std::println("{}/{}: {}", problem_index + 1, problems.size(), problem_name);
-    auto problem = get_problem(problem_name, true);
+    auto problem = get_archived(problem_name);
+    replace_inequalities(problem);
 
     const auto [n, d] = problem.A.shape();
     std::println("  size: {} x {} (nz = {})", n, d, problem.A.nonzero_count());
 
     // solve using entries reduction
     {
-      seekers::TablesParameters tables_params{
+      seekers::AllRowsParameters params{
+          .max_diff = 2,
           .groups_count = 4,
-          .max_small_row_size = 8,
+          .threshold = 8,
           .entries_reduction = true,
-          .log_prefix = problem_name + "_with_reduction_",
-          .log_entries_growth = true,
+          .entries_count_logger =
+              EntriesCountLogger{problem_name +
+                                 "_with_reduction_entries_growth"},
       };
 
-      seekers::Tables<double, seekers::DoubleHasher>(2, tables_params)
-          .seek(problem.A);
+      seekers::AllRows<double, DoubleHasher>::seek(problem.A, params);
     }
 
     // solve without entries reduction
     {
-      seekers::TablesParameters tables_params{
+      seekers::AllRowsParameters params{
+          .max_diff = 2,
           .groups_count = 4,
-          .max_small_row_size = 8,
+          .threshold = 8,
           .entries_reduction = false,
-          .log_prefix = problem_name + "_no_reduction_",
-          .log_entries_growth = true,
+          .entries_count_logger =
+              EntriesCountLogger{problem_name + "_no_reduction_entries_growth"},
       };
 
-      seekers::Tables<double, seekers::DoubleHasher>(2, tables_params)
-          .seek(problem.A);
+      seekers::AllRows<double, DoubleHasher>::seek(problem.A, params);
     }
   }
 }

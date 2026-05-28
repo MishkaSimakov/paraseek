@@ -3,10 +3,10 @@
 #include <random>
 #include <utility>
 
-#include "helpers/RandomProblem.h"
 #include "helpers/Rational.h"
 #include "problems/ArchivedProblem.h"
 #include "problems/ProblemsNames.h"
+#include "problems/Random.h"
 #include "utils/Printing.h"
 #include "vars/BruteForce.h"
 #include "vars/Result.h"
@@ -24,8 +24,7 @@ void compare_small_with_brute_force(const CSCMatrix<Rational>& matrix,
   const auto result =
       seekers::SmallRows<Rational, RationalHasher>::seek(matrix, params).first;
 
-  ASSERT_EQ(result.as_set(),
-            std::set(expected.begin(), expected.end()));
+  ASSERT_EQ(result.as_set(), std::set(expected.begin(), expected.end()));
 }
 
 TEST(SmallRowsTests, CompareWithBruteForce1) {

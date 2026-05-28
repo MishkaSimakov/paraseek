@@ -6,8 +6,8 @@
 #include "helpers/CheckFeasible.h"
 #include "helpers/Highs.h"
 #include "helpers/LiftSolution.h"
-#include "helpers/RandomProblem.h"
 #include "problems/Problem.h"
+#include "problems/Random.h"
 #include "vars/Reducer.h"
 
 template <typename Field>
@@ -16,7 +16,21 @@ void assert_reducer_correct(
     const std::vector<std::pair<size_t, size_t>>& rows) {
   const auto [n, d] = problem.A.shape();
 
-  auto [reduced, mapping] = Reducer().apply(problem, rows);
+  auto [reduced, mapping] = Reducer::apply(problem, rows);
+
+  // print problem
+  for (size_t col = 0; col < 10; ++col) {
+    std::cout << problem.is_integer[col] << "\t";
+  }
+  std::cout << std::endl;
+  std::cout << problem.A << std::endl;
+
+  // print reduced
+  for (size_t col = 0; col < 10; ++col) {
+    std::cout << reduced.is_integer[col] << "\t";
+  }
+  std::cout << std::endl;
+  std::cout << reduced.A << std::endl;
 
   ASSERT_EQ(mapping.size(), d);
 
@@ -124,7 +138,7 @@ TEST(ReducerTests, proves_infeasibility_for_parallel_lines) {
   ASSERT_NO_FATAL_FAILURE(assert_reducer_correct(problem, {{0, 1}}));
 }
 
-TEST(ReducerTests, test_random_small) {
+TEST(ReducerTests, RandomSmall) {
   std::default_random_engine random;
 
   constexpr size_t rows_count = 2;
@@ -144,7 +158,7 @@ TEST(ReducerTests, test_random_small) {
   }
 }
 
-TEST(ReducerTests, test_random_big) {
+TEST(ReducerTests, RandomBig) {
   std::default_random_engine random;
 
   constexpr size_t rows_count = 25;
@@ -159,6 +173,27 @@ TEST(ReducerTests, test_random_big) {
 
   for (size_t i = 0; i < 100; ++i) {
     auto problem = generate_random_problem<double>(rows_count, 1000, random);
+
+    ASSERT_NO_FATAL_FAILURE(assert_reducer_correct(problem, rows));
+  }
+}
+
+TEST(ReducerTests, RandomMILP) {
+  std::default_random_engine random;
+
+  constexpr size_t rows_count = 4;
+  std::vector<std::pair<size_t, size_t>> rows;
+
+  // add all pairs into rows
+  for (size_t i = 0; i < rows_count; ++i) {
+    for (size_t j = i + 1; j < rows_count; ++j) {
+      rows.emplace_back(i, j);
+    }
+  }
+
+  for (size_t i = 0; i < 1000; ++i) {
+    auto problem = generate_random_problem<double>(rows_count, 10, random, true,
+                                                   0.4, true);
 
     ASSERT_NO_FATAL_FAILURE(assert_reducer_correct(problem, rows));
   }

@@ -1,15 +1,13 @@
-#include <cassert>
 #include <chrono>
-#include <map>
+#include <fstream>
 #include <print>
 
-#include "../src/nonzeros/ReduceNonzeros.h"
-#include "../src/variables/ExpressionDisjointSet.h"
-#include "../src/variables/Reducer.h"
-#include "problems/ProblemMatrix.h"
+#include "nonzeros/ReduceNonzeros.h"
+#include "problems/ArchivedProblem.h"
 #include "problems/ProblemsNames.h"
-#include "utils/Printing.h"
-#include "variables/Tables.h"
+#include "problems/ReplaceInequalities.h"
+#include "utils/Paths.h"
+#include "utils/Time.h"
 
 using namespace std::chrono_literals;
 
@@ -29,7 +27,9 @@ int main() {
     std::println("{}/{}: {}", problem_index + 1, problems.size(),
                  problems[problem_index]);
 
-    auto problem = get_problem("presolved_" + problems[problem_index], true);
+    auto problem = get_archived("presolved_" + problems[problem_index]);
+    replace_inequalities(problem);
+
     const auto [n, d] = problem.A.shape();
 
     std::println("  size: {} x {} (nz = {})", n, d, problem.A.nonzero_count());
@@ -37,8 +37,8 @@ int main() {
     std::optional<Problem<double>> new_problem = std::nullopt;
 
     auto duration = timing::timeit([&] {
-      new_problem = ReduceNonzeros<double, seekers::DoubleHasher>(
-                        groups_count, selected_groups_count)
+      new_problem = ReduceNonzeros<double, DoubleHasher>(groups_count,
+                                                         selected_groups_count)
                         .apply(problem);
     });
 

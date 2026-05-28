@@ -11,15 +11,26 @@ template <typename Field, typename Gen>
            std::convertible_to<double, Field>)
 Problem<Field> generate_random_problem(size_t n, size_t d, Gen&& generator,
                                        bool feasible = true,
-                                       double density = 0.4) {
+                                       double density = 0.4,
+                                       bool is_milp = false) {
   std::uniform_real_distribution<double> alpha_dist(0.1, 10);
   std::uniform_real_distribution<double> value_dist(-5.0, 5.0);
+  std::uniform_int_distribution<int> int_value_dist(-5, 5);
   std::uniform_real_distribution<double> prob(0.0, 1.0);
+
+  std::vector<bool> is_integer(d);
+  for (size_t i = 0; i < d; ++i) {
+    // generate \approx 2 integer variables if the problem is MILP
+    if (is_milp) {
+      is_integer[i] = rnd::bernoulli(2. / static_cast<double>(d), generator);
+    }
+  }
 
   // --- Generate random feasible solution ---
   std::vector<double> x_true(d);
   for (size_t j = 0; j < d; ++j) {
-    x_true[j] = value_dist(generator);
+    x_true[j] =
+        is_integer[j] ? int_value_dist(generator) : value_dist(generator);
   }
 
   // --- Generate sparse A ---
@@ -105,8 +116,6 @@ Problem<Field> generate_random_problem(size_t n, size_t d, Gen&& generator,
   for (size_t row = 0; row < n; ++row) {
     rhs_bounds[row] = {b[row], b[row]};
   }
-
-  std::vector<bool> is_integer(d, false);
 
   return {A, rhs_bounds, c, bounds, is_integer};
 }

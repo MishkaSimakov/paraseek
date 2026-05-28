@@ -7,6 +7,7 @@
 
 #include "Splitter.h"
 #include "matrix/CSCMatrix.h"
+#include "utils/Hashers.h"
 
 namespace splitters {
 

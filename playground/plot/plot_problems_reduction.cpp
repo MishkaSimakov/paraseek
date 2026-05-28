@@ -1,15 +1,14 @@
 #include <cassert>
 #include <chrono>
+#include <fstream>
 #include <map>
 #include <print>
 
-#include "../../src/variables/ExpressionDisjointSet.h"
-#include "../../src/variables/Reducer.h"
-#include "problems/ProblemMatrix.h"
+#include "problems/ArchivedProblem.h"
 #include "problems/ProblemsNames.h"
-#include "utils/Printing.h"
-#include "variables/BruteForce.h"
-#include "variables/Tables.h"
+#include "problems/ReplaceInequalities.h"
+#include "vars/AllRows.h"
+#include "vars/Reducer.h"
 
 using namespace std::chrono_literals;
 
@@ -28,19 +27,17 @@ int main() {
     std::println("{}/{}: {}", problem_index + 1, problems.size(),
                  problems[problem_index]);
 
-    // auto problem =
-        // get_problem("presolved_" + benchmark_set[problem_index], true);
-    auto problem = get_problem(problems[problem_index], true);
+    auto problem = get_archived("presolved_" + benchmark_set[problem_index]);
+    replace_inequalities(problem);
 
     const auto [init_n, init_d] = problem.A.shape();
 
-    seekers::TablesParameters params{
+    seekers::AllRowsParameters params{
+        .max_diff = max_diff,
         .groups_count = 4,
-        .max_small_row_size = 8,
+        .threshold = 8,
         .small_column_limit = 2,
         .entries_reduction = true,
-        .log_prefix = "",
-        .log_entries_growth = false,
     };
 
     size_t iterations = 0;
@@ -53,9 +50,8 @@ int main() {
       std::println("  size: {} x {} (nz = {})", n, d,
                    problem.A.nonzero_count());
 
-      auto seeker =
-          seekers::Tables<double, seekers::DoubleHasher>(max_diff, params);
-      auto result = seeker.seek(problem.A);
+      auto [result, _] =
+          seekers::AllRows<double, DoubleHasher>::seek(problem.A, params);
 
       std::println("  done!");
 

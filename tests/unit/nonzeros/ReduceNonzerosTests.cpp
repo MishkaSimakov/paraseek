@@ -5,9 +5,9 @@
 #include "helpers/CheckFeasible.h"
 #include "helpers/FixedSplitter.h"
 #include "helpers/Highs.h"
-#include "helpers/RandomProblem.h"
 #include "helpers/Rational.h"
 #include "nonzeros/ReduceNonzeros.h"
+#include "problems/Random.h"
 
 template <typename Field, typename FieldHasher>
 void assert_reducer_correct(const Problem<Field>& problem) {

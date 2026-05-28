@@ -3,14 +3,14 @@
 #include <map>
 #include <print>
 
-#include "../../src/variables/ExpressionDisjointSet.h"
-#include "../../src/variables/Reducer.h"
-#include "problems/ProblemMatrix.h"
+#include "problems/ArchivedProblem.h"
 #include "problems/ProblemStatistics.h"
 #include "problems/ProblemsNames.h"
+#include "problems/ReplaceInequalities.h"
 #include "utils/Printing.h"
-#include "variables/BruteForce.h"
-#include "variables/Tables.h"
+#include "vars/AllRows.h"
+#include "vars/BruteForce.h"
+#include "vars/Reducer.h"
 
 using namespace std::chrono_literals;
 
@@ -29,7 +29,8 @@ int main() {
 
     std::println("{}/{}: {}", problem_index + 1, benchmark_set.size(),
                  problem_name);
-    auto problem = get_problem(problem_name, true);
+    auto problem = get_archived(problem_name);
+    replace_inequalities(problem);
 
     const auto [n, d] = problem.A.shape();
     std::println("  size: {} x {} (nz = {})", n, d, problem.A.nonzero_count());

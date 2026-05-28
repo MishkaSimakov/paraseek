@@ -1,13 +1,12 @@
-#include <cassert>
 #include <chrono>
-#include <map>
+#include <fstream>
 #include <print>
 #include <random>
 
-#include "../../tests/helpers/RandomProblem.h"
 #include "problems/ProblemStatistics.h"
-#include "variables/BruteForce.h"
-#include "variables/Tables.h"
+#include "problems/Random.h"
+#include "vars/AllRows.h"
+#include "vars/BruteForce.h"
 
 using namespace std::chrono_literals;
 
@@ -38,17 +37,15 @@ int main() {
     std::println("  size: {} x {} (nz = {})", n, d, problem.A.nonzero_count());
 
     // solve using tables
-    seekers::TablesParameters tables_params{
+    seekers::AllRowsParameters tables_params{
+        .max_diff = max_diff,
         .groups_count = 4,
-        .max_small_row_size = 8,
+        .threshold = 8,
         .entries_reduction = true,
-        .log_prefix = "",
-        .log_entries_growth = false,
     };
 
     auto tables_time = timing::timeit([&] {
-      seekers::Tables<double, seekers::DoubleHasher>(max_diff, tables_params)
-          .seek(problem.A);
+      seekers::AllRows<double, DoubleHasher>::seek(problem.A, tables_params);
     });
 
     // solve using brute force

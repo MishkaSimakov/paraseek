@@ -3,10 +3,10 @@
 #include <random>
 #include <utility>
 
-#include "helpers/RandomProblem.h"
 #include "helpers/Rational.h"
 #include "problems/ArchivedProblem.h"
 #include "problems/ProblemsNames.h"
+#include "problems/Random.h"
 #include "utils/Printing.h"
 #include "vars/BigRows.h"
 #include "vars/BruteForce.h"

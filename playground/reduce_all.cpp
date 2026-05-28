@@ -1,15 +1,14 @@
 #include <cassert>
 #include <chrono>
+#include <fstream>
 #include <map>
 #include <print>
 
-#include "../src/variables/ExpressionDisjointSet.h"
-#include "../src/variables/Reducer.h"
-#include "problems/ProblemMatrix.h"
+#include "problems/ArchivedProblem.h"
 #include "problems/ProblemsNames.h"
-#include "utils/Printing.h"
-#include "variables/BruteForce.h"
-#include "variables/Tables.h"
+#include "problems/ReplaceInequalities.h"
+#include "vars/AllRows.h"
+#include "vars/Reducer.h"
 
 using namespace std::chrono_literals;
 
@@ -27,18 +26,20 @@ int main() {
     std::println("{}/{}: {}", problem_index + 1, benchmark_set.size(),
                  benchmark_set[problem_index]);
 
-    auto problem =
-        get_problem("presolved_" + benchmark_set[problem_index], true);
+    auto problem = get_archived("presolved_" + benchmark_set[problem_index]);
+    replace_inequalities(problem);
+
     const auto [init_n, init_d] = problem.A.shape();
 
-    seekers::TablesParameters params{
+    seekers::AllRowsParameters params{
+        .max_diff = 2,
         .groups_count = 4,
-        .max_small_row_size = 8,
+        .threshold = 8,
     };
 
     size_t iterations = 0;
 
-    // solve using tables
+    // reduce using AllRows until something is changing
     for (size_t i = 0; i < 5; ++i) {
       ++iterations;
       const auto [n, d] = problem.A.shape();
@@ -46,16 +47,13 @@ int main() {
       std::println("  size: {} x {} (nz = {})", n, d,
                    problem.A.nonzero_count());
 
-      auto seeker =
-          seekers::Tables<double, seekers::DoubleHasher>(max_diff, params);
-      auto result = seeker.seek(problem.A);
-
-      std::println("  done!");
+      auto [result, _] =
+          seekers::AllRows<double, DoubleHasher>::seek(problem.A, params);
 
       auto for_reducer = result_for_reducer(result);
-      std::println("  size = {}", for_reducer.size());
+      std::println("  found pairs = {}", for_reducer.size());
 
-      auto [new_problem, mapping] = Reducer().apply(problem, for_reducer);
+      auto [new_problem, mapping] = Reducer::apply(problem, for_reducer);
 
       const size_t dn = problem.A.shape().first - new_problem.A.shape().first;
       const size_t dd = problem.A.shape().second - new_problem.A.shape().second;

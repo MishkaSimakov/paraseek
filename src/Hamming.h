@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cassert>
+
 #include "matrix/CSCMatrix.h"
 #include "utils/ZipRows.h"
 

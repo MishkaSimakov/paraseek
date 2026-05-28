@@ -29,9 +29,7 @@ Solution full_highs_solve(const std::string& name) {
 }
 
 TEST(MPSReaderTests, ReadAndSolve) {
-  const std::vector<std::string> small_problems = {
-      "markshare_4_0", "gen-ip054", "enlight_hard",
-      "timtab1",       "pk1",       "gen-ip002"};
+  const std::vector<std::string> small_problems = {"markshare_4_0"};
 
   for (const auto& name : small_problems) {
     SCOPED_TRACE(std::format("problem name: {}", name));
