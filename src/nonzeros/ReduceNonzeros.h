@@ -230,8 +230,6 @@ class ReduceNonzeros {
       }
     }
 
-    std::println("  found count = {}", found_count);
-
     std::vector<Field> dense(n, 0);
 
     // calculate hamming distance for subtracted rows, and discard subtraction

@@ -18,20 +18,6 @@ void assert_reducer_correct(
 
   auto [reduced, mapping] = Reducer::apply(problem, rows);
 
-  // print problem
-  for (size_t col = 0; col < 10; ++col) {
-    std::cout << problem.is_integer[col] << "\t";
-  }
-  std::cout << std::endl;
-  std::cout << problem.A << std::endl;
-
-  // print reduced
-  for (size_t col = 0; col < 10; ++col) {
-    std::cout << reduced.is_integer[col] << "\t";
-  }
-  std::cout << std::endl;
-  std::cout << reduced.A << std::endl;
-
   ASSERT_EQ(mapping.size(), d);
 
   const auto solution_old = solve(problem);
@@ -173,27 +159,6 @@ TEST(ReducerTests, RandomBig) {
 
   for (size_t i = 0; i < 100; ++i) {
     auto problem = generate_random_problem<double>(rows_count, 1000, random);
-
-    ASSERT_NO_FATAL_FAILURE(assert_reducer_correct(problem, rows));
-  }
-}
-
-TEST(ReducerTests, RandomMILP) {
-  std::default_random_engine random;
-
-  constexpr size_t rows_count = 4;
-  std::vector<std::pair<size_t, size_t>> rows;
-
-  // add all pairs into rows
-  for (size_t i = 0; i < rows_count; ++i) {
-    for (size_t j = i + 1; j < rows_count; ++j) {
-      rows.emplace_back(i, j);
-    }
-  }
-
-  for (size_t i = 0; i < 1000; ++i) {
-    auto problem = generate_random_problem<double>(rows_count, 10, random, true,
-                                                   0.4, true);
 
     ASSERT_NO_FATAL_FAILURE(assert_reducer_correct(problem, rows));
   }

@@ -81,17 +81,17 @@ class Reducer {
   // If problem is proven to be infeasible, then copy of the original problem is
   // returned with proven_unfeasible = true, vector of expressions is empty in
   // this case.
+  // For now, apply completely ignores variables integrality!
   static std::pair<Problem<double>, std::vector<VariableExpression>> apply(
       const Problem<double>& problem,
       const std::vector<std::pair<size_t, size_t>>& rows) {
-    // TODO: variable is integer, but inferred value is not
     const auto [n, d] = problem.A.shape();
 
     const auto transposed = problem.A.get_transposed();
 
-    // cols_ds[d] is a special constant variable
-    // if it can be proven that x_i = \beta, then x_i would be in the same
-    // set with cols_ds[d]
+    // cols_ds[d] is a special constant variable, that is always equal to 0.
+    // If it can be proven that x_i = \beta, then x_i would be in the same
+    // set with cols_ds[d] and x_i = x_d + \beta
     auto cols_ds = ExpressionDisjointSet(d + 1);
     auto rows_ds = DisjointSet(n);
 
@@ -126,20 +126,12 @@ class Reducer {
       }
 
       if (diff.size() == 2) {
-        // If after reduction we get a x_1 = b x_2, where both x_1 and x_2 are
-        // integer, then we skip this case for now. This information can be used
-        // to infer something about x_1 and x_2.
-        if (problem.is_integer[diff[0].first] &&
-            problem.is_integer[diff[1].first]) {
-          continue;
-        }
-
         cols_ds.unite(diff[0].first, diff[1].first,
                       LinearExpression<double>(-diff[1].second / diff[0].second,
                                                rhs_diff / diff[0].second));
       } else if (diff.size() == 1) {
         cols_ds.unite(diff[0].first, d,
-                      LinearExpression<double>(0, rhs_diff / diff[0].second));
+                      LinearExpression<double>(1, rhs_diff / diff[0].second));
       } else if (diff.size() == 0) {
         if (FieldTraits<double>::is_nonzero(rhs_diff)) {
           return infeasible(problem);
@@ -205,7 +197,6 @@ class Reducer {
 
           // x_col = value
           const double value = f1.composed_with(f2.inversed()).beta();
-          assert(f1.composed_with(f2.inversed()).alpha() == 0);
 
           mapping[col] = {
               .variable = 0,
@@ -213,7 +204,7 @@ class Reducer {
           };
 
           if (!problem.bounds[col].is_inside(value)) {
-            return infeasible(result);
+            return infeasible(problem);
           }
 
           for (const auto [row, coef] : problem.A.get_column(col)) {

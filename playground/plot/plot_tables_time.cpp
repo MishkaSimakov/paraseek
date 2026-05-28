@@ -19,6 +19,12 @@ int main() {
   const auto filename =
       std::format("tables_time_{}_{}.csv", max_diff, max_small_row_size);
   std::ofstream os(paths::log(filename));
+
+  std::cout << paths::log(filename) << std::endl;
+  if (!os) {
+    throw std::runtime_error("Failed to open output file.");
+  }
+
   std::println(os,
                "problem,rows_count,cols_count,nonzeros_count,groups_squared,"
                "entries_considered,small_rows_count,big_rows_time,small_rows_"
@@ -53,7 +59,7 @@ int main() {
       size_t entries_considered;
 
       for (size_t i = 0; i < 10; ++i) {
-        auto [result, stats] =
+        auto [_, stats] =
             seekers::AllRows<double, DoubleHasher>::seek(problem.A, params);
 
         entries_considered = stats.entries_considered;
