@@ -77,7 +77,7 @@ class AllRows {
     result.singular.append_range(big_result.singular);
     result.bipartite.append_range(big_result.bipartite);
 
-    return {result, stats};
+    return {std::move(result), stats};
   }
 };
 
