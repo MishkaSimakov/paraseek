@@ -7,6 +7,7 @@
 #include "problems/ArchivedProblem.h"
 #include "problems/ProblemsNames.h"
 #include "problems/ReplaceInequalities.h"
+#include "utils/CsvWriter.h"
 #include "utils/Printing.h"
 #include "utils/Time.h"
 
@@ -26,11 +27,14 @@ int main() {
   constexpr size_t groups_count = 4;
   constexpr size_t selected_groups_count = 2;
 
-  const auto filename = std::format("problems_nz_reduction_{}_{}.csv",
-                                    groups_count, selected_groups_count);
+  const auto filename =
+      std::format("{}_problems_nz_reduction_{}_{}.csv", paths::time_prefix(),
+                  groups_count, selected_groups_count);
   std::ofstream os(paths::log(filename));
-  std::println(os,
-               "problem_name,rows_count,old_nz_count,new_nz_count,duration");
+  CsvWriter csv{os};
+
+  csv << std::tuple{"problem_name", "rows_count", "old_nz_count",
+                    "new_nz_count", "duration"};
 
   const auto& problems = get_presolved_benchmark_set();
   // std::vector<std::string> problems = {"model_presolved256961v2"};
@@ -59,9 +63,9 @@ int main() {
                  new_problem->A.nonzero_count());
     std::println("  duration: {}", duration);
 
-    std::println(os, "{},{},{},{},{}", problems[problem_index],
-                 problem.A.shape().first, problem.A.nonzero_count(),
-                 new_problem->A.nonzero_count(), duration.count());
-    os.flush();
+    csv << std::tuple{problems[problem_index], problem.A.shape().first,
+                      problem.A.nonzero_count(), new_problem->A.nonzero_count(),
+                      duration.count()};
+    csv.flush();
   }
 }
