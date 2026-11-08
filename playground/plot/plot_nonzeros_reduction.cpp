@@ -41,7 +41,7 @@ int main() {
                  problems[problem_index]);
 
     auto problem = get_archived(problems[problem_index]);
-    replace_inequalities(problem);
+    // replace_inequalities(problem);
 
     const auto [n, d] = problem.A.shape();
 

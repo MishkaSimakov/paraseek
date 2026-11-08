@@ -26,6 +26,10 @@ class LinearExpression {
 
   Field beta() const { return beta_; }
 
-  template<typename T>
-  T value_at(T x) const { return alpha_ * x + beta_; }
+  template <typename T>
+  T value_at(T x) const {
+    return alpha_ * x + beta_;
+  }
+
+  bool operator==(const LinearExpression&) const = default;
 };

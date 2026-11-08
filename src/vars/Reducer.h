@@ -92,7 +92,7 @@ class Reducer {
     // cols_ds[d] is a special constant variable, that is always equal to 0.
     // If it can be proven that x_i = \beta, then x_i would be in the same
     // set with cols_ds[d] and x_i = x_d + \beta
-    auto cols_ds = ExpressionDisjointSet(d + 1);
+    auto cols_ds = ExpressionDisjointSet(d);
     auto rows_ds = DisjointSet(n);
 
     for (const auto [i, j] : rows) {
@@ -125,17 +125,23 @@ class Reducer {
         }
       }
 
+      auto result = ExpressionDisjointSet::UniteResult::OK;
+
       if (diff.size() == 2) {
-        cols_ds.unite(diff[0].first, diff[1].first,
+        result = cols_ds.unite(diff[0].first, diff[1].first,
                       LinearExpression<double>(-diff[1].second / diff[0].second,
                                                rhs_diff / diff[0].second));
       } else if (diff.size() == 1) {
-        cols_ds.unite(diff[0].first, d,
+        result = cols_ds.unite(diff[0].first, d,
                       LinearExpression<double>(1, rhs_diff / diff[0].second));
       } else if (diff.size() == 0) {
         if (FieldTraits<double>::is_nonzero(rhs_diff)) {
-          return infeasible(problem);
+          result = ExpressionDisjointSet::UniteResult::INFEASIBLE;
         }
+      }
+
+      if (result == ExpressionDisjointSet::UniteResult::INFEASIBLE) {
+        return infeasible(problem);
       }
 
       rows_ds.unite(i, j);
