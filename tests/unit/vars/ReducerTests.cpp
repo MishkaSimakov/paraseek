@@ -101,6 +101,24 @@ TEST(ReducerTests, test_small_problem_3) {
   ASSERT_NO_FATAL_FAILURE(assert_reducer_correct(problem, {{0, 1}}));
 }
 
+TEST(ReducerTests, test_small_problem_4) {
+  CSCMatrix<double> A = {{1, 1}, {1, -1}, {1, 2}};
+
+  std::vector<Bound<double>> rhs_bounds = {
+      {0, 0},
+      {0, 0},
+      {1, 1},
+  };
+  std::vector<double> c = {0, 0};
+
+  std::vector<Bound<double>> bounds(2);
+  std::vector<bool> is_integer(2, false);
+
+  const Problem problem(A, rhs_bounds, c, bounds, is_integer);
+
+  assert_reducer_correct(problem, {{0, 1}, {0, 2}, {1, 2}});
+}
+
 TEST(ReducerTests, proves_infeasibility_for_parallel_lines) {
   CSCMatrix<double> A = {
       {1, 2, 0, 0},

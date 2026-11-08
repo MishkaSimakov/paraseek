@@ -13,6 +13,7 @@ target_sources(tests PUBLIC
         unit/vars/SmallRowsTests.cpp
         unit/vars/BigRowsTests.cpp
         unit/vars/AllRowsTests.cpp
+        unit/vars/ExpressionDisjointSetTests.cpp
 )
 target_link_libraries(tests PRIVATE GTest::gtest_main paraseek highs Boost::boost)
 target_include_directories(tests PRIVATE .)
