@@ -51,13 +51,12 @@ class ReduceNonzeros {
       blocks[i].resize(groups.size(), Block{0, 0});
     }
 
-    std::unordered_map<std::pair<size_t, size_t>, size_t> map;
-
     for (size_t group_id = 0; group_id < groups.size(); ++group_id) {
       size_t classes_cnt = 1;
 
       for (const size_t col : groups[group_id]) {
-        map.clear();
+        // allocating new map each time actually decreases the runtime!
+        std::unordered_map<std::pair<size_t, size_t>, size_t> map;
 
         for (const auto [row, value] : matrix.get_column(col)) {
           ++blocks[row][group_id].nz_count;
