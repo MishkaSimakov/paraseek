@@ -5,6 +5,7 @@
 
 #include "nonzeros/ReduceNonzeros.h"
 #include "problems/ArchivedProblem.h"
+#include "problems/ProblemStatistics.h"
 #include "problems/ProblemsNames.h"
 #include "problems/ReplaceInequalities.h"
 #include "utils/CsvWriter.h"
@@ -33,38 +34,58 @@ int main() {
   std::ofstream os(paths::log(filename));
   CsvWriter csv{os};
 
-  csv << std::tuple{"problem_name", "rows_count", "old_nz_count",
-                    "new_nz_count", "duration"};
+  csv << std::tuple{"problem_name",
+                    "rows_count",
+                    "cols_count",
+                    "old_nz_count",
+                    "new_nz_count",
+                    "old_equalities_count",
+                    "new_equalities_count",
+                    "old_trivial_equalities_count",
+                    "new_trivial_equalities_count",
+                    "duration_ns"};
 
   const auto& problems = get_presolved_benchmark_set();
-  // std::vector<std::string> problems = {"model_presolved256961v2"};
 
   for (size_t problem_index = 0; problem_index < problems.size();
        ++problem_index) {
     std::println("{}/{}: {}", problem_index + 1, problems.size(),
                  problems[problem_index]);
 
-    auto problem = get_archived(problems[problem_index]);
-    // replace_inequalities(problem);
+    std::optional<Problem<double>> problem;
 
-    const auto [n, d] = problem.A.shape();
+    try {
+      problem = get_archived(problems[problem_index]);
+    } catch (const std::exception& err) {
+      std::cerr << err.what() << std::endl;
+      continue;
+    }
 
-    std::println("  size: {} x {} (nz = {})", n, d, problem.A.nonzero_count());
+    const auto [n, d] = problem->A.shape();
+
+    std::println("  size: {} x {} (nz = {})", n, d, problem->A.nonzero_count());
 
     std::optional<Problem<double>> new_problem = std::nullopt;
 
     auto duration = timing::timeit([&] {
       new_problem = ReduceNonzeros<double, DoubleHasher>(groups_count,
                                                          selected_groups_count)
-                        .apply(problem);
+                        .apply(*problem);
     });
 
-    std::println("  nz count: {} -> {}", problem.A.nonzero_count(),
+    std::println("  nz count: {} -> {}", problem->A.nonzero_count(),
                  new_problem->A.nonzero_count());
     std::println("  duration: {}", duration);
 
-    csv << std::tuple{problems[problem_index], problem.A.shape().first,
-                      problem.A.nonzero_count(), new_problem->A.nonzero_count(),
+    csv << std::tuple{problems[problem_index],
+                      problem->A.shape().first,
+                      problem->A.shape().second,
+                      problem->A.nonzero_count(),
+                      new_problem->A.nonzero_count(),
+                      equalities_count(*problem),
+                      equalities_count(*new_problem),
+                      trivial_equalities_count(*problem),
+                      trivial_equalities_count(*new_problem),
                       duration.count()};
     csv.flush();
   }
