@@ -1,5 +1,6 @@
 #include <Highs.h>
 
+#include "problems/ArchivedProblem.h"
 #include "problems/ProblemsNames.h"
 #include "utils/Paths.h"
 
@@ -19,7 +20,16 @@ void highs_presolve(const std::filesystem::path& input_path,
     throw std::runtime_error("Presolve failed: " + highsStatusToString(status));
   }
 
-  highs.writePresolvedModel(output_path);
+  if (highs.getModelPresolveStatus() != HighsPresolveStatus::kReduced &&
+      highs.getModelPresolveStatus() != HighsPresolveStatus::kNotReduced) {
+    throw std::runtime_error("Unexpected presolve result.");
+  }
+
+  status = highs.writePresolvedModel(output_path);
+  if (status != HighsStatus::kOk) {
+    throw std::runtime_error("Failed to write presolved model: " +
+                             highsStatusToString(status));
+  }
 }
 
 int main() {
@@ -33,6 +43,9 @@ int main() {
 
       auto input_name = std::format("{}.mps", problem_name);
       auto output_name = std::format("presolved_{}.mps", problem_name);
+
+      // check that problem is unarchived
+      unarchive(problem_name);
 
       highs_presolve(paths::problem(input_name), paths::problem(output_name));
     } catch (const std::exception& exception) {
