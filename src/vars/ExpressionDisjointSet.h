@@ -72,10 +72,22 @@ class ExpressionDisjointSet {
 
       // alpha != 0 => need to add:
       // leader_u = leader_v = beta / alpha
-      const size_t fake_var = parent_.size() - 1;
-      unite(leader_u, fake_var, LinearExpression<double>(1, beta / alpha));
 
-      return UniteResult::OK;
+      // check whether leader_u is already fixed
+      const size_t fake_var = parent_.size() - 1;
+
+      const auto [leader_fake, expr_fake] = leader(fake_var);
+
+      if (leader_fake == leader_u) {
+        const double value = expr_fake.inversed().value_at(0);
+
+        return FieldTraits<double>::is_nonzero(value * alpha - beta)
+                   ? UniteResult::INFEASIBLE
+                   : UniteResult::OK;
+      }
+
+      return unite(leader_u, fake_var,
+                   LinearExpression<double>(1, beta / alpha));
     }
 
     if (size_[leader_v] > size_[leader_u]) {
