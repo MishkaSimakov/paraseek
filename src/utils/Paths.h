@@ -16,4 +16,10 @@ inline std::filesystem::path problem(std::string_view filename) {
   return std::filesystem::path(PROBLEMS_PATH) / filename;
 }
 
+// Generates a prefix for experiments files based on the current time
+inline std::string time_prefix() {
+  return std::to_string(
+      std::chrono::steady_clock::now().time_since_epoch().count());
+}
+
 }  // namespace paths

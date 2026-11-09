@@ -6,6 +6,47 @@
 #include "matrix/CSCMatrix.h"
 
 template <typename Field>
+size_t equalities_count(const Problem<Field>& problem) {
+  const auto [n, d] = problem.A.shape();
+  size_t result = 0;
+
+  for (size_t i = 0; i < n; ++i) {
+    if (problem.rhs_bounds[i].is_fixed()) {
+      ++result;
+    }
+  }
+
+  return result;
+}
+
+template <typename Field>
+size_t trivial_equalities_count(const Problem<Field>& problem) {
+  const auto [n, d] = problem.A.shape();
+  const auto transposed = problem.A.get_transposed();
+
+  size_t result = 0;
+
+  for (size_t i = 0; i < n; ++i) {
+    if (!problem.rhs_bounds[i].is_fixed()) {
+      continue;
+    }
+
+    size_t row_nnz = 0;
+    for (const auto [_, value] : transposed[i]) {
+      if (FieldTraits<Field>::is_nonzero(value)) {
+        ++row_nnz;
+      }
+    }
+
+    if (row_nnz <= 2) {
+      ++result;
+    }
+  }
+
+  return result;
+}
+
+template <typename Field>
 size_t groups_squared(const CSCMatrix<Field>& matrix) {
   const auto [n, d] = matrix.shape();
   const auto rows_sizes = matrix.get_rows_sizes();
